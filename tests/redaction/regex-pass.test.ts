@@ -63,6 +63,16 @@ describe('regexPass', () => {
     expect(log.some((e) => e.type === 'ipv4')).toBe(true);
   });
 
+  it('does NOT replace an out-of-range IPv4 (octets > 255)', () => {
+    // Cherry-picked guard from the alternative implementation (PR #6, closed):
+    // strings like 999.999.999.999 share the dotted-quad shape but cannot be
+    // valid IPv4 addresses. The bounded-octet regex must reject them outright.
+    const text = 'fake address 999.888.777.666 in the logs';
+    const { redacted, log } = regexPass(text);
+    expect(redacted).toBe(text);
+    expect(log.filter((e) => e.type === 'ipv4')).toHaveLength(0);
+  });
+
   it('records each replacement with the offset of the match in the ORIGINAL text', () => {
     const text = 'Email alice@example.com and call +14165551234 right now.';
     const { log } = regexPass(text);
