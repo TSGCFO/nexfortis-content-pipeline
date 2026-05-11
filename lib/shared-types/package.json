@@ -1,0 +1,30 @@
+{
+  "name": "@ncp/shared-types",
+  "version": "0.0.1",
+  "private": true,
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./pillar": {
+      "types": "./dist/pillar.d.ts",
+      "import": "./dist/pillar.js"
+    },
+    "./article": {
+      "types": "./dist/article.d.ts",
+      "import": "./dist/article.js"
+    },
+    "./author": {
+      "types": "./dist/author.d.ts",
+      "import": "./dist/author.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc --build",
+    "typecheck": "tsc --build"
+  }
+}

@@ -1,0 +1,30 @@
+{
+  "name": "nexfortis-content-pipeline",
+  "version": "0.0.1",
+  "private": true,
+  "description": "NexFortis Automated Content Pipeline v2 — backend automation monorepo.",
+  "engines": {
+    "node": ">=22.0.0",
+    "pnpm": ">=10.0.0"
+  },
+  "scripts": {
+    "preinstall": "sh -c 'rm -f package-lock.json yarn.lock; case \"$npm_config_user_agent\" in pnpm/*) ;; *) echo \\\"Use pnpm instead\\\" >&2; exit 1 ;; esac'",
+    "build": "tsc --build",
+    "typecheck": "tsc --build",
+    "test": "vitest run",
+    "lint": "eslint .",
+    "format": "prettier --write ."
+  },
+  "devDependencies": {
+    "@types/node": "^22.5.0",
+    "@typescript-eslint/eslint-plugin": "^8.0.0",
+    "@typescript-eslint/parser": "^8.0.0",
+    "@vitest/coverage-v8": "^2.0.0",
+    "eslint": "^9.7.0",
+    "eslint-config-prettier": "^9.1.0",
+    "prettier": "^3.3.0",
+    "tsx": "^4.16.0",
+    "typescript": "5.5.3",
+    "vitest": "^2.0.0"
+  }
+}
