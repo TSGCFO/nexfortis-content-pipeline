@@ -14,5 +14,9 @@
   "scripts": {
     "build": "tsc --build",
     "typecheck": "tsc --build"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.28.0",
+    "@ncp/logger": "workspace:*"
   }
 }
