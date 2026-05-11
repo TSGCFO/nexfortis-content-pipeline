@@ -95,17 +95,30 @@ export async function haikuScrub(
 
   let raw: string;
   try {
+    // Assistant-turn prefill: starting the assistant message with '{' forces
+    // Claude to continue from there and emit a JSON object as its first token,
+    // dramatically reducing the chance of conversational preamble or markdown
+    // fences sneaking into the response. The leading '{' is NOT included in
+    // the returned text, so we prepend it back when reconstructing the raw
+    // payload below.
     const response = await client.messages.create({
       model,
       max_tokens: HAIKU_MAX_TOKENS,
       system: SYSTEM_PROMPT,
-      messages: [{ role: 'user', content: buildUserPrompt(text) }],
+      messages: [
+        { role: 'user', content: buildUserPrompt(text) },
+        { role: 'assistant', content: '{' },
+      ],
     });
     const block = response.content?.[0];
     if (!block || block.type !== 'text') {
       throw new Error('haiku_scrub: unexpected response shape (no text block)');
     }
-    raw = block.text;
+    // Re-attach the prefilled '{' so downstream parsers receive a complete
+    // JSON object. The model occasionally emits its own '{' anyway, so we
+    // only prepend when the response text does not already start with one.
+    const responseText = block.text;
+    raw = responseText.trimStart().startsWith('{') ? responseText : `{${responseText}`;
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     logger.error(
