@@ -85,18 +85,50 @@ function sha256Hex(value: string): string {
   return createHash('sha256').update(value, 'utf8').digest('hex');
 }
 
-function constantTimeStringEquals(a: string, b: string): boolean {
-  if (a.length !== b.length) return false;
-  const bufA = Buffer.from(a, 'utf8');
-  const bufB = Buffer.from(b, 'utf8');
-  if (bufA.length !== bufB.length) return false;
+/**
+ * Constant-time comparison of two hex-encoded hash strings.
+ *
+ * Both inputs must be valid equal-length hex strings; if either is malformed
+ * (e.g. a placeholder like `__PLACEHOLDER_LEGAL_HASH_1__`) the function
+ * returns `false`. This means placeholder blocklist entries can never match a
+ * real SHA-256 hash — fail-closed-by-accident behavior we rely on.
+ *
+ * Approach: parse both hex strings into byte buffers, then compare with
+ * `crypto.timingSafeEqual`. We do this rather than UTF-8-encode the hex
+ * strings directly because hex-decoded-then-compared is the idiomatic
+ * cryptographic pattern and makes the intent (compare the underlying hashes,
+ * not the textual encoding) unambiguous.
+ */
+function hexHashesMatch(candidateHex: string, blocklistHex: string): boolean {
+  if (candidateHex.length === 0 || candidateHex.length !== blocklistHex.length) {
+    return false;
+  }
+  let bufA: Buffer;
+  let bufB: Buffer;
+  try {
+    bufA = Buffer.from(candidateHex, 'hex');
+    bufB = Buffer.from(blocklistHex, 'hex');
+  } catch {
+    return false;
+  }
+  // `Buffer.from(_, 'hex')` silently drops invalid characters; verify the
+  // round-trip is exact so placeholder strings can't accidentally match a
+  // truncated buffer of equal size.
+  if (bufA.length === 0 || bufA.length !== bufB.length) {
+    return false;
+  }
+  if (bufA.length * 2 !== candidateHex.length || bufB.length * 2 !== blocklistHex.length) {
+    return false;
+  }
   return timingSafeEqual(bufA, bufB);
 }
 
 function emailMatchesBlocklist(emailHash: string, hashes: readonly string[]): boolean {
+  // Walk the entire list even after we find a match so the timing of a
+  // matching call is indistinguishable from a non-matching one.
   let matched = false;
   for (const candidate of hashes) {
-    if (constantTimeStringEquals(emailHash, candidate)) {
+    if (hexHashesMatch(emailHash, candidate)) {
       matched = true;
     }
   }
@@ -145,4 +177,28 @@ export function checkBlocklist(
   }
 
   return { blocked: false };
+}
+
+/**
+ * Convenience wrapper for callers that prefer exception-based control flow.
+ *
+ * The orchestrator (`redact()`) does NOT use this — it returns a
+ * `{ status: 'blocked' }` discriminated result. This helper is provided for
+ * ingester code (e.g. an MS Graph email ingester) that wants to short-circuit
+ * with a `throw` on the first blocked capture rather than thread a result
+ * through multiple call sites.
+ *
+ * Throws `BlocklistViolationError` if `checkBlocklist` returns `blocked: true`.
+ */
+export function assertNotBlocked(
+  input: BlocklistInput,
+  opts: CheckBlocklistOptions = {},
+): void {
+  const result = checkBlocklist(input, opts);
+  if (result.blocked) {
+    throw new BlocklistViolationError(
+      result.reason,
+      `capture blocked by family-law blocklist: ${result.reason}`,
+    );
+  }
 }

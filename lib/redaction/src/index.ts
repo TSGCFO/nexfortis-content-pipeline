@@ -1,6 +1,7 @@
 export { redact } from './redact.js';
 export {
   checkBlocklist,
+  assertNotBlocked,
   BlocklistViolationError,
   BLOCKLIST_EMAIL_HASHES,
   BLOCKLIST_SUBJECT_REGEX,
