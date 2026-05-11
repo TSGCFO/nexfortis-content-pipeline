@@ -159,15 +159,27 @@ specified scope, nothing more.
 
 ## Cursor Cloud specific instructions
 
+*This section is strategist-maintained, like the rest of `AGENTS.md`. It is
+updated only via a dedicated PR opened by Hassan or the orchestrator. The
+"do not edit context files" rule above applies to this section in full — if
+an implementing agent thinks something here is wrong, stop and add a
+`// TODO(hassan):` note in the PR description. Do not edit this section to
+"fix" what looks like a problem.*
+
 - **Toolchain:** Node 22 and pnpm 10 are pre-installed via nvm. No additional
   runtime setup is needed.
-- **Pre-scaffold state:** Until Prompt 1 (Initial Scaffold) is merged, there is
-  no `package.json` — `pnpm install` and all build/test/lint commands will fail
-  with `ERR_PNPM_NO_PKG_MANIFEST`. This is expected.
+- **Post-scaffold state:** Since Prompt 1 (Initial Scaffold) merged, the
+  workspace is initialized. `pnpm install` should run cleanly on every fresh
+  Cursor Cloud VM. (Historical note: before that merge, `pnpm install` would
+  fail with `ERR_PNPM_NO_PKG_MANIFEST` because no `package.json` existed yet.)
 - **Update script:** The VM startup script guards `pnpm install` behind
   `test -f package.json` so it is safe in both pre- and post-scaffold states.
-- **No external services for local dev (yet):** Supabase, Inngest, and other
-  integrations are not required until services are implemented. Tests use
-  synthetic fixtures and mocks.
-- **Build/test/lint/typecheck commands** are documented in the
-  "Build and test commands" section above. All four must pass before opening a PR.
+- **No external services for local dev (yet):** Supabase, Inngest, OpenAI,
+  Anthropic, Telegram, Microsoft Graph, Sanity, SEOwind, and Clearscope are
+  not required until the services that integrate with them are implemented.
+  Tests use synthetic fixtures and Vitest mocks. Do not add real credentials
+  to the environment or to test fixtures.
+- **Build / test / lint / typecheck commands** are documented in the
+  "Build and test commands" section above. All four must pass before opening
+  a PR. CI runs the same four commands on every PR via
+  `.github/workflows/ci.yml`.
