@@ -14,5 +14,10 @@
   "scripts": {
     "build": "tsc --build",
     "typecheck": "tsc --build"
+  },
+  "dependencies": {
+    "@ncp/logger": "workspace:*",
+    "openai": "^4.65.0",
+    "tiktoken": "^1.0.17"
   }
 }
