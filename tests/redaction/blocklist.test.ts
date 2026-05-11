@@ -2,6 +2,7 @@ import { createHash } from 'node:crypto';
 import { describe, expect, it } from 'vitest';
 
 import {
+  assertNotBlocked,
   BLOCKLIST_BODY_KEYWORDS,
   BLOCKLIST_EMAIL_HASHES,
   BLOCKLIST_SUBJECT_REGEX,
@@ -168,5 +169,44 @@ describe('BlocklistViolationError', () => {
     expect(err.code).toBe('BLOCKLIST_VIOLATION');
     expect(err.reason).toBe('email_address');
     expect(err.name).toBe('BlocklistViolationError');
+  });
+});
+
+describe('assertNotBlocked', () => {
+  it('returns silently when input is not blocked', () => {
+    expect(() =>
+      assertNotBlocked(
+        { source: 'test', body: 'A clean message about NexFortis services.' },
+        { blocklistHashes: TEST_HASHES },
+      ),
+    ).not.toThrow();
+  });
+
+  it('throws BlocklistViolationError with the reason when blocked by email', () => {
+    let caught: unknown;
+    try {
+      assertNotBlocked(
+        {
+          source: 'test',
+          senderEmail: TEST_LEGAL_EMAIL,
+          body: 'Unrelated body.',
+        },
+        { blocklistHashes: TEST_HASHES },
+      );
+    } catch (err) {
+      caught = err;
+    }
+    expect(caught).toBeInstanceOf(BlocklistViolationError);
+    expect((caught as BlocklistViolationError).reason).toBe('email_address');
+    expect((caught as BlocklistViolationError).code).toBe('BLOCKLIST_VIOLATION');
+  });
+
+  it('throws BlocklistViolationError when blocked by subject keyword', () => {
+    expect(() =>
+      assertNotBlocked(
+        { source: 'test', subject: 'Custody update', body: 'Unrelated body.' },
+        { blocklistHashes: TEST_HASHES },
+      ),
+    ).toThrow(BlocklistViolationError);
   });
 });
