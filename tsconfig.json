@@ -1,0 +1,15 @@
+{
+  "files": [],
+  "references": [
+    { "path": "./lib/shared-types" },
+    { "path": "./lib/logger" },
+    { "path": "./lib/db" },
+    { "path": "./lib/embeddings" },
+    { "path": "./lib/redaction" },
+    { "path": "./artifacts/capture-worker" },
+    { "path": "./artifacts/synthesis-worker" },
+    { "path": "./artifacts/telegram-bot" },
+    { "path": "./artifacts/gate-worker" },
+    { "path": "./artifacts/sanity-bridge" }
+  ]
+}
