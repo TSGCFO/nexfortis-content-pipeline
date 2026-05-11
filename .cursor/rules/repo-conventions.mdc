@@ -1,0 +1,74 @@
+---
+description: Core nexfortis-content-pipeline conventions (always-on)
+alwaysApply: true
+---
+
+# nexfortis-content-pipeline repo conventions
+
+This is the **NexFortis Automated Content Pipeline v2** — backend automation
+only. No UI, no React, no frontend frameworks. pnpm workspace monorepo,
+TypeScript strict, **Node.js 22+**, pnpm 10. The full agent-facing guide is in
+[AGENTS.md](mdc:AGENTS.md). Read it before any implementation work.
+
+## Hard rules — do not violate
+
+- **One prompt = one PR.** Every implementation task comes from a prompt in
+  [`docs/ways-of-work/plan/content-pipeline-v2/cursor-claude-prompt-library.md`](mdc:docs/ways-of-work/plan/content-pipeline-v2/cursor-claude-prompt-library.md).
+  Open one PR per prompt. Do not combine prompts.
+- **Stay inside each prompt's allowed-file list.** Each prompt declares the
+  exact files it may create or modify and the exact files it must not touch.
+  Do not refactor adjacent code, do not consolidate utilities, do not
+  auto-format files outside the allowed list.
+- **Never edit context files**: `AGENTS.md`, `CLAUDE.md`, anything under
+  `.cursor/`, `.github/PULL_REQUEST_TEMPLATE.md`, `.editorconfig`,
+  `.gitignore`. If a behavior change is needed, stop and add a
+  `// TODO(hassan):` note in the PR description — do not modify the context
+  file.
+- **`docs/` is read-only.** Specs are the source of truth — code follows
+  specs, not the other way around. If a spec is wrong, stop and flag it; do
+  not change code to match a wrong spec or change a spec to match wrong code.
+- **Use pnpm.** `npm` and `yarn` are blocked by the `preinstall` hook.
+- **Branch protection on `main`** — all work goes through PRs, squash merges
+  only, CI must pass.
+- **No `.env` files committed.**
+- **No new top-level dependencies** without an explicit allowlist entry in the
+  active prompt. Stop and ask if a dependency is needed but not allowed.
+- **No dependency version bumps** beyond what the prompt allows.
+- **No changes to `lib/db` schemas** unless the active prompt explicitly names
+  the table being changed.
+- **No PII or family-law content in the corpus.** The `lib/redaction` module
+  is fail-closed. Use synthetic fixtures for testing — never real captures.
+- **Use the words "collect", "extract", "browse", "read"** when describing
+  fetching pages or data. Do not use "scrape" or "crawl" anywhere.
+
+## Stack conventions
+
+- TypeScript strict mode. No `any`. Use `unknown` and narrow.
+- Exported shared types live in `lib/shared-types`. Service-local types stay
+  in the service.
+- Discriminated unions for multi-state values.
+- All async wrapped in try/catch with structured logging via `lib/logger`
+  (pino + `{ correlationId, source, action }` context).
+- Idempotency keys on every external write.
+- Drizzle ORM. No raw SQL except in migrations.
+- Inngest for cron + async events. No setTimeout/setInterval for scheduling.
+- Vitest for tests. Path: `tests/<service>/<test-name>.test.ts`. Happy path +
+  2 edge cases per requirement, minimum.
+
+## Build and test
+
+- `pnpm install`
+- `pnpm typecheck`
+- `pnpm test`
+- `pnpm lint`
+- `pnpm build`
+
+All four must pass before opening a PR.
+
+## PR conventions
+
+- **Title:** `Prompt N: <short description>`
+- **Description:** follows `.github/PULL_REQUEST_TEMPLATE.md`
+- **Definition of Done** items from the prompt all checked off before
+  requesting review
+- Hassan is the merge approver; Computer (the strategist AI) co-reviews

@@ -124,83 +124,119 @@ Follow `AGENTS.md` and `.cursorrules`.
 
 ### Prompt 1: Initial Scaffold
 
-**Role:** Senior implementer working on `TSGCFO/nexfortis-content-pipeline`. Follow `AGENTS.md` and `.cursorrules` (you are creating them in this prompt).
+**Role:** Senior implementer working on `TSGCFO/nexfortis-content-pipeline`. Read `AGENTS.md`, `CLAUDE.md`, and `.cursor/rules/*.mdc` before doing anything. These files **already exist and are strategist-authored** — you do NOT create or modify them in this prompt.
 
 **Strategic context (do not deviate):**
 - This is Prompt 1 of 15. No prior implementation exists.
-- This prompt creates the foundational repo structure that every subsequent prompt depends on. Do not build any business logic — only infrastructure.
+- The repo already contains: `AGENTS.md`, `CLAUDE.md`, `.cursorrules`, `.cursor/rules/repo-conventions.mdc`, `.cursor/rules/prompt-discipline.mdc`, `.cursor/rules/context-files.mdc`, `.github/PULL_REQUEST_TEMPLATE.md`, `.editorconfig`, `.gitignore`, `.env.example`, `README.md`, and all planning docs under `docs/`. **Do not modify any of these.** They are the behavioral contract for this entire project. If you believe one is wrong, stop and add a `// TODO(hassan):` note in your PR description.
+- This prompt creates the foundational pnpm workspace, build/test/CI infrastructure, and a hello-world Inngest function that every subsequent prompt depends on. Do not build any business logic — only the workspace skeleton.
 - Decisions coming in future prompts: Drizzle schemas (Prompt 2), redaction module (Prompt 3), embeddings (Prompt 4), individual ingesters (Prompts 5–8), synthesis (Prompt 9), Telegram bot (Prompt 10), quality gate (Prompts 11–12), Sanity bridge (Prompt 13), distribution (Prompt 14), observability (Prompt 15). DO NOT pre-build any of these.
 
-**Objective:** Create the complete pnpm workspace scaffold, CI pipeline, behavioral constraint files, and hello-world Inngest function for the `nexfortis-content-pipeline` repo.
+**Objective:** Create the pnpm workspace, root tooling (TypeScript config, Vitest, ESLint, Prettier), CI pipeline, package skeletons for the 5 artifacts and 5 lib modules, inlined shared-types files, and one passing hello-world Inngest function in `artifacts/capture-worker/`.
 
-**Spec reference:** `architecture-and-data-model.md §1, §4, §8`
+**Spec reference:** [`architecture-and-data-model.md`](../architecture-and-data-model.md) §1 (Overview), §4 (Service Topology), §8 (Environment Variables — reference only; the `.env.example` file already exists, do not modify).
 
 **Allowed files (create or modify):**
-- All files at repo root: `pnpm-workspace.yaml`, `package.json`, `tsconfig.base.json`, `.env.example`, `README.md`, `AGENTS.md`, `.cursorrules`, `.gitignore`, `.github/PULL_REQUEST_TEMPLATE.md`, `.github/workflows/ci.yml`
-- `artifacts/capture-worker/package.json`, `src/index.ts` (hello-world Inngest function only)
-- `artifacts/synthesis-worker/package.json`, `src/index.ts` (placeholder)
-- `artifacts/telegram-bot/package.json`, `src/index.ts` (placeholder)
-- `artifacts/gate-worker/package.json`, `src/index.ts` (placeholder)
-- `artifacts/sanity-bridge/package.json`, `src/index.ts` (placeholder)
-- `lib/db/package.json` (placeholder — no schema yet)
-- `lib/embeddings/package.json` (placeholder)
-- `lib/redaction/package.json` (placeholder)
-- `lib/shared-types/package.json`, `pillar.ts`, `article.ts`, `author.ts` (inlined copies with sync header comment)
-- `lib/logger/package.json`, `index.ts` (pino + Sentry stub)
+- Workspace root tooling only:
+  - `pnpm-workspace.yaml`
+  - `package.json` (root, private, scripts: `build`, `typecheck`, `test`, `lint`, `format`)
+  - `tsconfig.base.json`
+  - `tsconfig.json` (workspace project references)
+  - `.npmrc` (if needed for pnpm config)
+  - `vitest.config.ts` (workspace-wide)
+  - `eslint.config.mjs` (flat config)
+  - `.prettierrc.json`
+  - `.github/workflows/ci.yml`
+- Per-package skeletons (each: `package.json`, `tsconfig.json`, `src/index.ts` placeholder):
+  - `artifacts/capture-worker/` — plus a real hello-world Inngest function and a test
+  - `artifacts/synthesis-worker/` (placeholder only)
+  - `artifacts/telegram-bot/` (placeholder only)
+  - `artifacts/gate-worker/` (placeholder only)
+  - `artifacts/sanity-bridge/` (placeholder only)
+  - `lib/db/` (empty placeholder — no schemas yet, deferred to Prompt 2)
+  - `lib/embeddings/` (empty placeholder, deferred to Prompt 4)
+  - `lib/redaction/` (empty placeholder, deferred to Prompt 3)
+  - `lib/logger/` — implement: pino-based logger with `{ correlationId, source, action }` context, exported typed `Logger` interface, Sentry initialization gated on `SENTRY_DSN` env var
+  - `lib/shared-types/` — create `article.ts`, `pillar.ts`, `author.ts` as inlined copies (see Edge cases below)
 - `tests/capture-worker/hello-world.test.ts`
 
 **MUST NOT touch:**
-- Anything in `NexFortis-Website-Design-pro` (separate repo — never reference it)
-- No actual business logic — no Drizzle schemas, no API clients, no cron jobs beyond the hello-world
+- `AGENTS.md`, `CLAUDE.md`, `.cursorrules`, anything under `.cursor/`, `.github/PULL_REQUEST_TEMPLATE.md`, `.editorconfig`, `.gitignore`, `.env.example`, `README.md`, anything under `docs/`. **These already exist and are strategist-authored.** If you spot something you think is wrong in any of them, stop and add a `// TODO(hassan):` note in your PR description. Do not edit the file.
+- Anything in the `NexFortis-Website-Design-pro` repository — it is a separate repo and not accessible from here.
+- No actual business logic. No Drizzle schemas, no API clients beyond Inngest's, no cron jobs beyond hello-world.
 
-**Dependencies allowed (pinned versions):**
-- `inngest@3.22.0`
-- `pino@9.3.1`
-- `@sentry/node@8.18.0`
-- `typescript@5.5.3`
-- `vitest@2.0.4`
-- `@types/node@20.14.12`
-- `tsx@4.16.2`
-- `eslint@9.7.0`
+**Dependencies allowed (pinned versions — use these exact versions; if any is yanked, stop and ask):**
+- `inngest@^3.22.0` (root + `artifacts/capture-worker`)
+- `pino@^9.3.0` (`lib/logger`)
+- `@sentry/node@^8.18.0` (`lib/logger`)
+- `typescript@5.5.3` (root dev dep)
+- `vitest@^2.0.0` (root dev dep)
+- `@types/node@^22.5.0` (root dev dep; Node 22+)
+- `tsx@^4.16.0` (root dev dep)
+- `eslint@^9.7.0` (root dev dep)
+- `@typescript-eslint/eslint-plugin@^8.0.0`, `@typescript-eslint/parser@^8.0.0` (root dev dep)
+- `prettier@^3.3.0` (root dev dep)
 
 **Dependencies NOT allowed without explicit approval:**
-- React, Vue, or any frontend framework
-- Any database client (deferred to Prompt 2)
+- React, Vue, Svelte, or any frontend framework (this is backend-only)
+- Any database client — Drizzle is deferred to Prompt 2
 - Any HTTP client library (use native `fetch`)
+- Turbo, Nx, or any monorepo orchestrator beyond pnpm workspaces
+- ts-node (use `tsx`)
 
 **Edge cases to handle:**
-- `AGENTS.md` must include a section warning future implementers: "Do not overwrite this file. Update it only via a dedicated PR with Hassan's approval."
-- `.cursorrules` must be valid JSON or YAML (confirm the format Cursor expects) and include the rule: "Never modify files not named in the prompt's explicit allowed list."
-- `.env.example` must include every variable from `architecture-and-data-model.md §8` with placeholder values only — never real values.
-- `lib/shared-types/*.ts` files must begin with the comment: `// INLINED COPY — keep in sync with NexFortis-Website-Design-pro/lib/shared-types/[filename] // Last synced: [date]`
+- **`pnpm-workspace.yaml`** must declare both `artifacts/*` and `lib/*` as workspaces.
+- **Node version pin:** add `"engines": { "node": ">=22.0.0", "pnpm": ">=10.0.0" }` to root `package.json`, and add a `preinstall` script that blocks `npm` and `yarn` (mirror the pattern from the main NexFortis monorepo).
+- **Workspace project references:** root `tsconfig.json` uses `references: []` pointing to each package's `tsconfig.json`. Root `pnpm typecheck` runs `tsc --build`.
+- **CI workflow** (`.github/workflows/ci.yml`) must run on `pull_request` and `push` to `main`. Steps: checkout, setup-node@v4 with `node-version: 22`, setup-pnpm@v4 with version 10, `pnpm install --frozen-lockfile`, `pnpm typecheck`, `pnpm lint`, `pnpm test`, `pnpm build`. Fail the workflow if any step fails.
+- **Inlined shared types:** `lib/shared-types/article.ts`, `pillar.ts`, `author.ts` must each begin with this exact header comment:
+  ```
+  // INLINED COPY — source of truth: TSGCFO/NexFortis-Website-Design-pro
+  // When this type changes in the main repo, manually re-sync here.
+  // Last synced: 2026-05-10
+  ```
+  For Prompt 1, define minimal interfaces: `Pillar = 'quickbooks' | 'managed-it' | 'cybersecurity'`; `Author = { id: string; name: string; bio: string; linkedinUrl?: string }`; `Article = { id: string; slug: string; title: string; pillar: Pillar; authorId: string; publishedAt: string | null }`. Future prompts will extend these.
+- **Logger:** `lib/logger/index.ts` exports `createLogger(opts: { source: string }): Logger` returning a pino instance with bound `{ source }`. Sentry init runs at module load only if `process.env.SENTRY_DSN` is set; otherwise the module loads without error.
+- **Hello-world Inngest function:** in `artifacts/capture-worker/src/index.ts`, register one function with id `hello-world` triggered by event `ping/hello`. It logs `"capture-worker alive"` via `lib/logger` and returns `{ ok: true }`. Errors are caught and re-thrown after logging.
+- **No `.env` file is committed.** The `.env.example` exists already; CI provides env vars via repo secrets when needed.
 
 **Type safety:**
-- All placeholder `src/index.ts` files must typecheck cleanly with no `any`.
-- `lib/logger/index.ts` must export a typed `Logger` interface.
+- TypeScript `strict: true` in `tsconfig.base.json`. Also enable `noUncheckedIndexedAccess`, `exactOptionalPropertyTypes`, `noImplicitOverride`.
+- All exports typed. No `any`. No `// @ts-ignore`.
+- `Logger` interface is exported and used by the hello-world function.
 
 **Error handling:**
-- Hello-world Inngest function must catch errors and log via `lib/logger`.
+- Hello-world Inngest function wraps its work in `try { ... } catch (err) { logger.error({ err }, 'hello-world failed'); throw err }`.
+- Logger module catches Sentry init failure and logs a warning rather than crashing.
 
 **Tests required:**
 - Path: `tests/capture-worker/hello-world.test.ts`
-- Assertions: hello-world Inngest function registers without throwing; `pnpm -r build` succeeds.
+- Assertions:
+  - The hello-world Inngest function is registered with id `hello-world`.
+  - Invoking the function's handler with a fake event returns `{ ok: true }`.
+  - The logger is called with `source: 'capture-worker'` context.
+- Use Vitest mocks for `lib/logger`; do not start a real Inngest server in tests.
 
 **Definition of Done:**
-- [ ] `pnpm -r build` passes with no TypeScript errors
-- [ ] `pnpm test` passes
+- [ ] `pnpm install` runs clean with `--frozen-lockfile` failing only if the lockfile is missing (first run will create it)
+- [ ] `pnpm typecheck` passes
+- [ ] `pnpm test` passes (the one hello-world test)
 - [ ] `pnpm lint` passes
-- [ ] `AGENTS.md` present at repo root with architecture overview
-- [ ] `.cursorrules` present at repo root with all behavioral rules
-- [ ] `.env.example` contains all variables from architecture spec §8
-- [ ] All 5 artifact `package.json` files present
-- [ ] All 5 lib `package.json` files present
-- [ ] CI workflow runs on PR and executes lint + typecheck + test
-- [ ] PR opened: `scaffold: initial pnpm workspace, AGENTS.md, CI`
+- [ ] `pnpm build` passes
+- [ ] All 5 `artifacts/*/package.json` files exist with correct `name`, `version`, `private: true`, and matching workspace pattern
+- [ ] All 5 `lib/*/package.json` files exist
+- [ ] `lib/shared-types/{article,pillar,author}.ts` exist with the sync header comment
+- [ ] `lib/logger/index.ts` exports `createLogger` and a typed `Logger`
+- [ ] `.github/workflows/ci.yml` runs typecheck + lint + test + build on PR and push to main
+- [ ] **Zero modifications** to `AGENTS.md`, `CLAUDE.md`, `.cursorrules`, `.cursor/**`, `.github/PULL_REQUEST_TEMPLATE.md`, `.editorconfig`, `.gitignore`, `.env.example`, `README.md`, or anything under `docs/`
+- [ ] PR opened with title `Prompt 1: Initial Scaffold` and the PR description follows `.github/PULL_REQUEST_TEMPLATE.md`
 
 **Out of scope (do NOT implement in this prompt):**
-- Any Drizzle schema or database connection
-- Any API client (OpenAI, Anthropic, Telegram, MS Graph)
-- Any actual ingestion, synthesis, or gate logic
+- Any Drizzle schema or database connection (deferred to Prompt 2)
+- Any API client (OpenAI, Anthropic, Telegram, MS Graph, Sanity, SEOwind, Clearscope) — all deferred to their respective prompts
+- Any actual ingestion, synthesis, gating, or distribution logic
+- Any Render deployment configuration (deferred)
+- Editing or improving any context/constraint file
 
 ---
 

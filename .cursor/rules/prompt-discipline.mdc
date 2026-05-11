@@ -1,0 +1,68 @@
+---
+description: Rules for executing implementation prompts from the Prompt Library
+alwaysApply: true
+---
+
+# Prompt execution discipline
+
+All implementation work in this repo comes from prompts in the
+[Cursor / Claude Code Prompt Library](mdc:docs/ways-of-work/plan/content-pipeline-v2/cursor-claude-prompt-library.md).
+The prompts are sequenced; later prompts depend on decisions made in earlier
+ones.
+
+## What you must do when running a prompt
+
+1. **Read the entire prompt before writing a single line of code.**
+2. **Read the spec reference** in the prompt's "Spec reference" field. The
+   spec is the contract; the prompt is the assignment.
+3. **Read the "Strategic context (do not deviate)" section.** It tells you
+   what decisions have already been made in prior prompts and what is coming
+   in future prompts. The "DO NOT pre-build" warnings exist because future
+   prompts will build those things — building them now creates conflicts.
+4. **Check the file allowlist.** Confirm the files you intend to create or
+   modify are all in the allowlist. If they are not, stop and ask.
+5. **Check the file blocklist.** Confirm none of the files you intend to
+   modify are in the blocklist. If they are, stop and ask.
+6. **Check the dependency allowlist.** If you need a dependency not on the
+   allowlist, stop and ask. Do not install it.
+7. **Implement only what the prompt asks for.** No bonus features, no
+   "while-I-was-here" refactors, no consolidations, no out-of-scope file
+   touches.
+8. **Handle every edge case in the prompt's "Edge cases" section.** They are
+   listed because they are known failure modes; if you skip one, the next
+   prompt may break.
+9. **Write the tests specified in the prompt.** Same path, same assertions.
+   Add additional tests if you discover new edge cases — never remove the
+   ones the prompt requires.
+10. **Run the Definition of Done checklist** before opening the PR. Every item
+    must pass.
+
+## What you must not do
+
+- **Do not interpret ambiguity.** If something in the prompt is unclear, stop
+  and add a comment in the PR description asking for clarification. Do not
+  guess.
+- **Do not "improve" the spec.** If the spec is wrong, flag it — do not
+  silently work around it.
+- **Do not combine prompts.** One prompt = one PR. If you find yourself
+  needing things from a future prompt, you are doing too much.
+- **Do not refactor outside the allowlist** even if you spot something
+  improvable. File a separate issue if it matters.
+- **Do not auto-format files outside the allowlist.** Prettier/ESLint on save
+  must be scoped to the active files only.
+- **Do not skip tests** because "it's obvious." Cursor's track record on
+  unstated edge cases is poor — tests are the only protection against drift.
+
+## PR description requirements
+
+Every PR description must include:
+
+- The prompt number and title
+- A checked list of every Definition of Done item
+- Any `// TODO(hassan):` notes you added (with the reason)
+- Confirmation that no files outside the allowlist were touched
+- Confirmation that no new top-level dependencies were added
+- Confirmation that `pnpm typecheck && pnpm test && pnpm lint && pnpm build`
+  all pass locally
+
+The PR template at `.github/PULL_REQUEST_TEMPLATE.md` formats this for you.

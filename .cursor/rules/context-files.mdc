@@ -1,0 +1,47 @@
+---
+description: Never edit context/behavioral files — these are authored by the strategist
+alwaysApply: true
+---
+
+# Context files are strategist-authored — do not edit
+
+The following files in this repository are behavioral context for AI agents.
+They are authored and maintained by Hassan and Computer (the strategist AI).
+**Implementing agents (Cursor, Claude Code) must never modify them**, even
+when fixing seemingly-related issues, even when they appear out of date.
+
+## Files you must not edit
+
+| Path | Purpose |
+|---|---|
+| `AGENTS.md` | Repo-level instructions for any AI agent |
+| `CLAUDE.md` | Claude Code specific instructions |
+| `.cursorrules` | Legacy Cursor pointer file |
+| `.cursor/rules/*.mdc` | Modern Cursor structured rules |
+| `.github/PULL_REQUEST_TEMPLATE.md` | PR description template |
+| `.editorconfig` | Cross-editor formatting |
+| `.gitignore` | Git ignore rules |
+| `.env.example` | Documentation of required env vars |
+
+## What to do if you think a context file is wrong
+
+1. **Stop.** Do not edit the file.
+2. **Add a `// TODO(hassan):` comment in your PR description**, explaining:
+   - Which file you think needs to change
+   - What you think it should say
+   - Why (with reference to the active prompt)
+3. **Continue implementing the prompt as written.** If the missing context
+   meant you couldn't complete the prompt, mark the relevant Definition of
+   Done items as blocked and explain.
+
+## Why this rule exists
+
+These files act as **persistent system-prompt injection** across many Cursor
+sessions. The whole reason this project uses Cursor + Claude Code instead of
+Replit Agent is that they reliably respect stable context files. If
+implementing agents are allowed to edit them, that stability evaporates —
+constraints drift session over session and prompts stop being reliable.
+
+The only sanctioned way these files change is: Hassan and the strategist
+explicitly update them between prompt runs, outside of any implementation
+work.

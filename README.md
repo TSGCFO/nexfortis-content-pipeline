@@ -24,12 +24,18 @@ Backend automation system that produces SEO-ranked blog content for [nexfortis.c
 
 This project is implemented by **Cursor agents (cloud + local) and Claude Code**, with prompts authored by Hassan and Computer (the orchestrating AI). PRs are reviewed by Hassan before merge. See ADR-010 in the Tool Stack Decision Record for why Replit Agent was deliberately not used here.
 
-Two constraint files at the repo root (added during Prompt 1 — Initial Scaffold) will govern agent behavior:
+Behavioral constraint files are **already authored and committed** at the repo root. They are strategist-authored — implementing agents (Cursor, Claude Code) must never modify them:
 
-- `AGENTS.md` — repo-level instructions (purpose, architecture, conventions, decision pointers)
-- `.cursorrules` — Cursor-specific behavioral rules (no auto-formatting outside scope, no unsolicited refactors, no out-of-scope file changes, mandatory test additions, PR description template, no dependency upgrades without permission)
+- [`AGENTS.md`](./AGENTS.md) — repo-level instructions for any AI agent (purpose, architecture, hard rules)
+- [`CLAUDE.md`](./CLAUDE.md) — Claude Code-specific quick-read
+- [`.cursorrules`](./.cursorrules) — legacy Cursor pointer file
+- [`.cursor/rules/repo-conventions.mdc`](./.cursor/rules/repo-conventions.mdc) — always-on conventions
+- [`.cursor/rules/prompt-discipline.mdc`](./.cursor/rules/prompt-discipline.mdc) — how to execute prompts from the library
+- [`.cursor/rules/context-files.mdc`](./.cursor/rules/context-files.mdc) — explicit "do not edit context files" rule
+- [`.github/PULL_REQUEST_TEMPLATE.md`](./.github/PULL_REQUEST_TEMPLATE.md) — PR description template referenced by every prompt
+- [`.editorconfig`](./.editorconfig), [`.gitignore`](./.gitignore), [`.env.example`](./.env.example) — formatting, ignores, env var documentation
 
-These files are stable system-prompt injection. Cursor and Claude Code respect them reliably. Do not edit them in ways that conflict with the active prompt.
+These files are stable system-prompt injection. Cursor and Claude Code respect them reliably. If an implementing agent thinks one needs to change, the rule is: **stop and add a `// TODO(hassan):` note in the PR description** — do not edit the file. Prompt 1 (Initial Scaffold) explicitly excludes all of these from its allowed-file list.
 
 ---
 

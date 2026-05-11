@@ -1,0 +1,55 @@
+# dependencies
+node_modules/
+.pnpm-store/
+
+# build output
+dist/
+build/
+*.tsbuildinfo
+.turbo/
+
+# env (NEVER commit real env vars)
+.env
+.env.local
+.env.*.local
+.env.development
+.env.production
+.env.test
+
+# logs
+logs/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# editor / OS
+.vscode/
+!.vscode/extensions.json
+!.vscode/settings.shared.json
+.idea/
+.DS_Store
+Thumbs.db
+*.swp
+*.swo
+
+# testing / coverage
+coverage/
+.nyc_output/
+*.lcov
+
+# Inngest local state
+.inngest/
+
+# Drizzle local artifacts (the migrations themselves ARE committed under lib/db/migrations)
+drizzle-tmp/
+
+# scratch / local
+/tmp/
+/scratch/
+*.local
+
+# captured-content scratch (NEVER commit real capture data — even fixtures)
+/captures-scratch/
+/test-fixtures-private/

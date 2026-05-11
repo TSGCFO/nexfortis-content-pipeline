@@ -1,0 +1,23 @@
+# Cursor rules — pointer file
+
+Modern Cursor reads structured rules from `.cursor/rules/*.mdc`. This file is
+kept only for older Cursor clients that do not yet read that directory.
+
+Read these in order:
+1. `AGENTS.md` — agent-facing guide for the whole repo
+2. `.cursor/rules/repo-conventions.mdc` — always-on conventions
+3. `.cursor/rules/prompt-discipline.mdc` — rules for executing prompts from the Prompt Library
+4. `.cursor/rules/context-files.mdc` — rules for never editing AGENTS.md / CLAUDE.md / .cursor/
+
+## Quick conventions
+
+- pnpm workspace monorepo. pnpm 10, Node 22+ (CI and Render both pin Node 22 — match locally). Squash merges into `main`.
+- This repo is **backend automation only** — no UI, no React, no Vite. Do not install UI frameworks.
+- All planning docs live in `docs/ways-of-work/plan/content-pipeline-v2/`. **`docs/` is read-only.**
+- All implementation work comes from prompts in `docs/ways-of-work/plan/content-pipeline-v2/cursor-claude-prompt-library.md`. **One prompt = one PR.**
+- **Never edit** `AGENTS.md`, `CLAUDE.md`, or anything under `.cursor/`, `.github/PULL_REQUEST_TEMPLATE.md`, `.editorconfig`, `.gitignore`. These are strategist-authored. If a behavior change is needed, stop and add a `// TODO(hassan):` note in the PR description.
+- Never use the words "scrape" or "crawl" — use "collect", "extract", "browse", "read".
+- TypeScript strict mode. No `any`. All async wrapped in try/catch with `lib/logger`.
+- No `.env` files committed. Real env vars live in Render and Cursor Cloud / local shell.
+- No new top-level dependencies, no version bumps, no lib/db schema changes outside the active prompt's allowlist.
+- PR title format: `Prompt N: <short description>`. PR description follows `.github/PULL_REQUEST_TEMPLATE.md`.
