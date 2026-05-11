@@ -156,3 +156,18 @@ If you are the implementing agent, your job is narrow: execute exactly the
 prompt you are given. If the prompt is ambiguous, stop and ask. Do not guess.
 Do not improve. Do not refactor. Do not consolidate. Open a PR with the
 specified scope, nothing more.
+
+## Cursor Cloud specific instructions
+
+- **Toolchain:** Node 22 and pnpm 10 are pre-installed via nvm. No additional
+  runtime setup is needed.
+- **Pre-scaffold state:** Until Prompt 1 (Initial Scaffold) is merged, there is
+  no `package.json` — `pnpm install` and all build/test/lint commands will fail
+  with `ERR_PNPM_NO_PKG_MANIFEST`. This is expected.
+- **Update script:** The VM startup script guards `pnpm install` behind
+  `test -f package.json` so it is safe in both pre- and post-scaffold states.
+- **No external services for local dev (yet):** Supabase, Inngest, and other
+  integrations are not required until services are implemented. Tests use
+  synthetic fixtures and mocks.
+- **Build/test/lint/typecheck commands** are documented in the
+  "Build and test commands" section above. All four must pass before opening a PR.
