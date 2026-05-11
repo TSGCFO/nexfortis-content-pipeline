@@ -1,8 +1,28 @@
-# Cursor / Claude Code Prompt Library — NexFortis Content Pipeline v2
+> ## ⚠️ HISTORICAL REFERENCE — DO NOT USE THESE PROMPTS DIRECTLY
+>
+> The prompts below were drafted at planning time to validate that the v2 architecture is implementable. They are **not** authoritative and are **not** the prompts that will be run against this repo.
+>
+> **How prompts actually work in this project:**
+>
+> 1. **Computer (the strategist AI)** reads the current repo state — what's merged, what's open, what each PR shipped, any `// TODO(hassan):` notes, any drift from spec.
+> 2. **Computer picks the next task** based on real state, the roadmap, the Feature PRDs, and the architecture spec — not based on a pre-written list.
+> 3. **Computer writes the prompt fresh in chat** with Hassan, tailored to the actual state of the repo at that moment. The prompt includes corrected file allowlists, references to what just merged, and edge cases informed by anything learned from the prior PR.
+> 4. **Hassan copies the prompt** from the chat (Computer shares it as a file) and pastes it into Cursor or Claude Code.
+> 5. **Cursor / Claude Code execute and open a PR.**
+> 6. **Hassan and Computer review the PR**, merge or request changes.
+> 7. **Repeat from step 1.**
+>
+> **Why this file remains:** It is preserved as historical reference for the rough shape and sequence of work. Anyone reading the spec can see the original prompt structure that was used to validate the architecture's implementability. The actual prompts that ship in PRs will differ — sometimes substantially — because real implementation surfaces real edge cases.
+>
+> **Do not copy-paste these prompts into Cursor.** Use them only as one input among many when Computer authors the next prompt fresh.
+
+---
+
+# Cursor / Claude Code Prompt Library — NexFortis Content Pipeline v2 (HISTORICAL REFERENCE)
 
 **Document Owner:** Hassan Sadiq, NexFortis  
 **Parent Epic:** [NexFortis Automated Content Pipeline v2](./epic-prd.md)  
-**Status:** Production Spec — Ready for Use  
+**Status:** Historical reference — not authoritative. See banner above. Prompts are authored fresh per task in chat.  
 **Version:** 1.0  
 **Created:** May 10, 2026  
 **Audience:** Hassan Sadiq (prompt executor), Computer (prompt author + QA), future contractors
