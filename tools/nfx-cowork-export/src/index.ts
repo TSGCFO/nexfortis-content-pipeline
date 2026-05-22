@@ -89,8 +89,9 @@ export {
 export {
   AGENT_TOOL_NAME,
   doStitch,
+  loadStitchables,
   readAgentDispatchMap,
-  stitchSubagents,
+  type Stitchable,
   type SubagentStitchInput,
 } from "./stitch.js";
 

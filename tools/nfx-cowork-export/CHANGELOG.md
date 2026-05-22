@@ -18,6 +18,24 @@ Each released version has the following subsections (omit any that are empty):
 
 ## [Unreleased]
 
+### Fix (slice 4 review — PR #17 follow-up; no schemaVersion bump)
+
+Addresses the critical correctness bug Perplexity caught in slice 4's stitcher. The original implementation walked stitchables in array order and matched any stitchable whose firstUserPrefix existed ANYWHERE in `agentDispatchMap` — silently swapping subagents between dispatches when filesystem ordering of subagent files didn't match the order of `Agent` dispatches in the parent. The `beautiful-blissful-volta` brand-kit session (5 Agent dispatches) was the highest-risk real-data session.
+
+**Fix:** parser now captures the raw `toolu_<id>` of each `tool_use` block into a side map (`ParseResult.toolUseIdsByEventUuid`). The stitcher uses this map to look up the per-event dispatch prompt, then matches against subagent `firstUserPrefix` for THAT specific prompt. Each `Agent` `tool_call` is now correctly correlated to its specific dispatch regardless of filesystem ordering.
+
+**Secondary improvement:** the emitted `parentToolUseId` field on `subagent` events now carries the actual `toolu_<id>` from the source rather than the synthesized event uuid the previous slice 4 was emitting. Downstream consumers get the real id.
+
+**Tests:**
+- New: `mismatched-order` regression test — two Agent dispatches with stitchables in reverse array order, asserts each `tool_call` stitches to its CORRECT subagent (this is the exact scenario Perplexity's probe demonstrated was broken).
+- New: `mismatched-order + missing subagent` graceful-degradation test.
+- New: `same-order baseline` (sanity check that the easy case still works).
+- New: parser/stitcher integration test — `parseTranscript` populates `toolUseIdsByEventUuid` correctly.
+- New: `tool_call without map entry` no-match test — defensive behavior when the parser couldn't capture an id.
+- Updated: the existing "multiple subagents" test was passing by coincidence because stitchables and dispatches were in matching order. Replaced by the new tests above.
+
+**Real-data verification:** ran the fixed code against `beautiful-blissful-volta`'s 5 Agent dispatches. Every subagent's `parentToolUseId` now matches the ground-truth `toolu_<id>` from the parent transcript exactly. The first-user-message prefix of each stitched subagent matches the first 50 chars of its dispatch's `input.prompt`.
+
 ### Tool (slice 4 — subagent stitching + auto-continuation handling; no schemaVersion bump)
 
 Wires the subagent and continuation rules. Still no JSON written to disk — slice 5 adds that.

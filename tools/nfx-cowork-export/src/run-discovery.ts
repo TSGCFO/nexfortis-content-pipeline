@@ -24,6 +24,7 @@ import {
   doStitch,
   readAgentDispatchMap,
 } from './stitch.js';
+import type { Stitchable } from './stitch.js';
 import type {
   AuditRow,
   ExporterConfig,
@@ -132,9 +133,15 @@ async function parseOneTranscript(
 
   // Subagent stitching: for each subagent file, parse it; build a stitchable list.
   // Pull the parent's Agent dispatch map (toolu_id -> prompt) to drive matching.
+  //
+  // The toolUseIdsByEventUuid map from the parent's parse output is the
+  // critical input that lets the stitcher correlate a specific tool_call
+  // event to its specific dispatch — without it, two subagents would
+  // swap when filesystem ordering doesn't match dispatch order in the
+  // parent. (Slice-4 review bug fix; see stitch.ts header comment.)
   let finalEvents: Event[] = afterStrip;
   if (subagentFiles.length > 0) {
-    const stitchables: { file: string; slug: string; firstUserPrefix: string; events: Event[] }[] = [];
+    const stitchables: Stitchable[] = [];
     for (const sub of subagentFiles) {
       const parsedSub = await parseTranscript(sub.path);
       let firstUserPrefix = '';
@@ -152,17 +159,17 @@ async function parseOneTranscript(
       });
     }
     const dispatchMap = await readAgentDispatchMap(parent.path);
-    const stitchResult = doStitch(afterStrip, stitchables, dispatchMap);
+    const stitchResult = doStitch(
+      afterStrip,
+      stitchables,
+      dispatchMap,
+      parsed.toolUseIdsByEventUuid
+    );
     finalEvents = stitchResult.events;
 
     // Unmatched subagents: spec says emit envelope ANYWAY (empty-envelope rule
     // confirmed for slice 4). For now we surface them via the parse stats —
-    // slice 5's richer audit can list them by name. The "always emit envelope"
-    // rule is satisfied because doStitch DID emit an envelope for every
-    // successfully-matched subagent. Unmatched subagents whose Agent dispatch
-    // is missing from the parent (rare; shouldn't happen with real Cowork
-    // data) get their tool_call left as-is in the parent stream, which is
-    // a reasonable graceful-degradation.
+    // slice 5's richer audit can list them by name.
     void stitchResult.unmatchedSubagents;
   }
 
