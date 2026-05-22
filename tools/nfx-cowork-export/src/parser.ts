@@ -44,6 +44,16 @@ export interface ParseResult {
   linesFailedToParse: number;
   /** True if the file was abandoned because >5% of lines failed to parse. */
   abandoned: boolean;
+  /**
+   * Map from a `tool_call` event's `uuid` to the original `toolu_<id>` string
+   * from the source raw `tool_use` block. Populated for every `tool_call` event
+   * whose source carried an `id`. Used by the subagent stitcher to correlate
+   * a specific `tool_call` event to its specific dispatch — without this map,
+   * the stitcher would attribute the wrong subagent when a parent has more
+   * than one `Agent` dispatch and the filesystem ordering of subagent files
+   * doesn't match the dispatch order in the transcript.
+   */
+  toolUseIdsByEventUuid: Map<string, string>;
 }
 
 /** Maximum acceptable fraction of un-parseable lines. */
@@ -61,16 +71,29 @@ export async function parseTranscript(filePath: string): Promise<ParseResult> {
   // the threshold we discard the buffer.
 
   const events: Event[] = [];
+  const toolUseIdsByEventUuid = new Map<string, string>();
   let linesRead = 0;
   let linesFailedToParse = 0;
   let stat;
   try {
     stat = await fs.stat(filePath);
   } catch {
-    return { events: [], linesRead: 0, linesFailedToParse: 0, abandoned: false };
+    return {
+      events: [],
+      linesRead: 0,
+      linesFailedToParse: 0,
+      abandoned: false,
+      toolUseIdsByEventUuid,
+    };
   }
   if (!stat.isFile()) {
-    return { events: [], linesRead: 0, linesFailedToParse: 0, abandoned: false };
+    return {
+      events: [],
+      linesRead: 0,
+      linesFailedToParse: 0,
+      abandoned: false,
+      toolUseIdsByEventUuid,
+    };
   }
 
   const rl = createInterface({
@@ -90,7 +113,7 @@ export async function parseTranscript(filePath: string): Promise<ParseResult> {
       continue;
     }
 
-    const produced = classifyAndConvert(obj);
+    const produced = classifyAndConvert(obj, toolUseIdsByEventUuid);
     for (const e of produced) events.push(e);
   }
 
@@ -102,6 +125,7 @@ export async function parseTranscript(filePath: string): Promise<ParseResult> {
     linesRead,
     linesFailedToParse,
     abandoned,
+    toolUseIdsByEventUuid: abandoned ? new Map() : toolUseIdsByEventUuid,
   };
 }
 
@@ -113,7 +137,17 @@ export async function parseTranscript(filePath: string): Promise<ParseResult> {
  * list of blocks (`text`, `tool_use`, `thinking`) — each block we keep
  * becomes its own emitted event. The order matches the source.
  */
-export function classifyAndConvert(raw: unknown): Event[] {
+export function classifyAndConvert(
+  raw: unknown,
+  /**
+   * Optional collector. When provided, every emitted `tool_call` event whose
+   * source `tool_use` block carries an `id` will get `collector.set(eventUuid, toolu_id)`.
+   * The stitcher uses this map to correlate Agent dispatches with their
+   * specific subagent transcripts. Pass `undefined` to skip collection (the
+   * default — preserves prior behavior).
+   */
+  toolUseIdsCollector?: Map<string, string>
+): Event[] {
   if (typeof raw !== 'object' || raw === null) return [];
   const obj = raw as Record<string, unknown>;
   const type = obj['type'];
@@ -131,7 +165,7 @@ export function classifyAndConvert(raw: unknown): Event[] {
   }
 
   if (type === 'user') return convertUserEvent(obj);
-  if (type === 'assistant') return convertAssistantEvent(obj);
+  if (type === 'assistant') return convertAssistantEvent(obj, toolUseIdsCollector);
 
   // Unknown top-level types: drop. The slice-2 scan confirmed there are no
   // unknown top-level types in real data, so this is purely defensive.
@@ -191,7 +225,10 @@ function convertUserEvent(obj: Record<string, unknown>): Event[] {
   return [];
 }
 
-function convertAssistantEvent(obj: Record<string, unknown>): Event[] {
+function convertAssistantEvent(
+  obj: Record<string, unknown>,
+  toolUseIdsCollector?: Map<string, string>
+): Event[] {
   const ts = readStringField(obj, 'timestamp');
   const uuid = readStringField(obj, 'uuid');
   if (ts === undefined || uuid === undefined) return [];
@@ -228,6 +265,14 @@ function convertAssistantEvent(obj: Record<string, unknown>): Event[] {
         ...(summary !== null ? { summary } : {}),
       };
       out.push(event);
+      // Capture the raw `toolu_<id>` so the stitcher can correlate a specific
+      // tool_call event back to its source dispatch. Done only when a collector
+      // map is provided — avoids breaking call sites that don't need stitching
+      // (e.g. unit tests that just verify the Event[] shape).
+      const rawId = b['id'];
+      if (typeof rawId === 'string' && rawId.length > 0 && toolUseIdsCollector !== undefined) {
+        toolUseIdsCollector.set(childUuid, rawId);
+      }
     }
     // thinking blocks dropped per spec
   }

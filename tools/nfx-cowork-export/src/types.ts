@@ -1,67 +1,41 @@
 /**
- * Internal types used across the exporter's discovery / filter / audit
- * modules. These are NOT part of the emitted JSON schema (that's `schema.ts`).
+ * Internal types used across the exporter's discovery / filter / parse /
+ * stitch / audit modules. These are NOT part of the emitted JSON schema
+ * (that's `schema.ts`).
  */
+
+import type { Event } from './schema.js';
+import type { PostCheckDecision } from './post-check.js';
 
 /**
  * Result of walking a single `local_<uuid>/` session folder on disk.
- *
- * The walker reports what it FOUND, not what should be kept. Filters run
- * downstream against `SessionDiscovery` records to produce `FilterDecision`s.
  */
 export interface SessionDiscovery {
-  /** The Cowork session id (UUID). Same as the directory suffix `local_<id>`. */
+  /** The Cowork session-folder id (the part after `local_`). */
   sessionId: string;
-
   /** Absolute path to the `local_<uuid>` directory. */
   sessionFolder: string;
-
-  /**
-   * Absolute path to the sibling `local_<uuid>.json` meta file, if present.
-   * The walker may report a session whose meta is missing — that's a
-   * filterable condition, not a hard error.
-   */
+  /** Absolute path to the sibling `local_<uuid>.json` meta file, if present. */
   metaFile: string | null;
-
-  /**
-   * Parsed meta JSON contents if the file exists and parsed. `null` when the
-   * file is missing or unparseable.
-   */
+  /** Parsed meta JSON contents if the file exists and parsed. */
   meta: SessionMeta | null;
-
-  /**
-   * Primary transcript .jsonl file(s) for this session, if found. Most sessions
-   * have exactly one. Auto-continuation chains may have multiple (each gets
-   * its own filter decision later).
-   */
+  /** Transcript files found anywhere under this session folder. */
   transcripts: TranscriptFile[];
 }
 
 /**
- * Fields we read from the Cowork session meta JSON sidecar. Cowork's actual
- * sidecar has many more fields (system prompt, MCP server config, etc.); we
- * only pull what session-level filtering needs.
- *
- * All fields are optional because the meta sidecar can legitimately be
- * incomplete (e.g. an interrupted session).
+ * Fields we read from the Cowork session meta JSON sidecar. The real sidecar
+ * has many more fields; we only pull what session-level filtering needs.
  */
 export interface SessionMeta {
   sessionId?: string;
-  /** Session title — Cowork's auto-generated label. */
   title?: string;
-  /** Account email associated with the session (account-allowlist target). */
   emailAddress?: string;
-  /** Display name on the account. */
   accountName?: string;
-  /** Initial working directory at session start (cwd allowlist pre-check target). */
   cwd?: string;
-  /** ISO timestamp when the session was created. */
   createdAt?: string;
-  /** ISO timestamp of last activity. */
   lastActivityAt?: string;
-  /** Cowork-injected initial message — `<scheduled-task>` / `<command-message>` / etc. */
   initialMessage?: string;
-  /** Model identifier. */
   model?: string;
 }
 
@@ -78,10 +52,6 @@ export interface TranscriptFile {
 
 /**
  * The decision produced by session-level filtering for one `SessionDiscovery`.
- *
- * Discriminated on `keep`. When `keep === true` the session proceeds to
- * per-event filtering in slice 3+. When `keep === false` it's dropped with
- * a categorical reason for the audit log.
  */
 export type FilterDecision =
   | { keep: true; reason: 'passed_session_level_filters' }
@@ -100,11 +70,6 @@ export type SessionDropReason =
   | 'tiny_session'                        // post-filter: <3 events or <500 chars text
   | 'cwd_majority_outside_allowlist';     // post-filter: <80% of text chars in allowed cwds
 
-/**
- * Resolved configuration for a single exporter run. Loaded from the three
- * config files (cwd-allowlist, family-law-slugs, account-allowlist) and
- * passed by reference into every filter call.
- */
 export interface ExporterConfig {
   cwdAllowlist: {
     alwaysAllow: readonly string[];
@@ -115,12 +80,67 @@ export interface ExporterConfig {
   accountAllowlist: readonly string[];
 }
 
-/**
- * A single row in the dry-run / audit decision table. One per session.
- */
 export interface AuditRow {
   sessionId: string;
   slug: string | null;
   account: string | null;
   decision: FilterDecision;
+}
+
+/**
+ * One parsed parent transcript, ready to be serialized as a single JSON output
+ * file by slice 5. A `ParsedSession` carries one or more of these — exactly
+ * one for non-continuation sessions, multiple for sessions whose conversation
+ * spans auto-continuation chains.
+ *
+ * `transcriptId` (not the session-folder id) becomes the emitted JSON's
+ * `sessionId`. The schema's `workspaceId` carries the top-level Cowork
+ * workspace UUID separately.
+ */
+export interface ParsedTranscript {
+  /** UUID from the .jsonl filename. Becomes the emitted document's `sessionId`. */
+  transcriptId: string;
+  /** Absolute path to the source .jsonl on disk. */
+  sourceFile: string;
+  /** Events after per-event filtering, subagent stitching, and scaffold strip. */
+  events: Event[];
+  /**
+   * Stable per-transcript hash, set when this transcript is part of a
+   * continuation chain (i.e. its `-sessions-<slug>/` directory contains more
+   * than one parent .jsonl). Computed as
+   *   sha256("v1|" + sessionSlug + "|" + firstUserMessageAfterScaffoldStrip.trim().slice(0, 200))
+   * Absent on standalone (non-continuation) transcripts.
+   *
+   * Carrying the same `continuationGroupId` across transcripts in the same
+   * chain is not guaranteed by the formula alone — the ingester correlates
+   * them via `sessionSlug` + transcript createdAt ordering. The presence of
+   * the field on a transcript is itself the "this was a continuation" signal.
+   */
+  continuationGroupId?: string;
+  /** True if a scaffold message ("This session is being continued from...") was found and stripped from the start of the transcript. */
+  scaffoldStripped: boolean;
+  parseStats: {
+    linesRead: number;
+    linesFailed: number;
+    abandoned: boolean;
+  };
+}
+
+/**
+ * One parsed Cowork session, ready (after post-check) to be serialized as
+ * one-or-more JSON output files by slice 5.
+ *
+ * **Slice 5 emit-loop must filter on `postCheck.keep`** — sessions in this
+ * list that failed post-check are present here for audit-reporting purposes
+ * but MUST NOT have their transcripts written to disk. The audit row already
+ * surfaces the drop reason; emitting their JSON would defeat the post-filter.
+ */
+export interface ParsedSession {
+  discovery: SessionDiscovery;
+  /** Always `keep: true` for sessions present in the parsed-session list. */
+  sessionDecision: FilterDecision;
+  /** One per parent transcript. Standalone sessions: 1. Continuations: 2+. */
+  transcripts: ParsedTranscript[];
+  /** Aggregated post-check across ALL transcripts' events combined. */
+  postCheck: PostCheckDecision;
 }
