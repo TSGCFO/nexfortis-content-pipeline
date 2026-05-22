@@ -4,14 +4,14 @@
  *
  * Slice 2 supports a SUBSET of the flags listed in the locked spec:
  *   --input <dir>                     required
- *   --cwd-allowlist <path>            required (no default in slice 2; slice 5 adds OS-specific defaults)
+ *   --cwd-allowlist <path>            required (no OS-specific default yet — that's slice 5)
  *   --family-law-blocklist <path>     required
  *   --account-allowlist <path>        required
- *   --dry-run                         (implicit in slice 2; no other modes ship yet)
+ *   --dry-run                         (implicit through slice 4; slice 5 adds non-dry-run JSON emission)
  *
- * Slices 3-5 add:
- *   --output, --verbose, --validate-output, and the OS-specific defaults
- *   that let Hassan run the tool without any flags on his Windows laptop.
+ * Slice 5 adds:
+ *   --output, --verbose, --validate-output, OS-specific defaults for the
+ *   four config-path flags, the audit sidecar file, and actual JSON emission.
  */
 
 import os from 'node:os';
@@ -31,7 +31,7 @@ program
   .requiredOption('--cwd-allowlist <path>', 'Path to cwd-allowlist.json (see cwd-allowlist.example.json)')
   .requiredOption('--family-law-blocklist <path>', 'Path to family-law-slugs.json (see family-law-slugs.example.json)')
   .requiredOption('--account-allowlist <path>', 'Path to account-allowlist.json (see account-allowlist.example.json)')
-  .option('--dry-run', '[reserved — no-op in slice 2; slice 5+ will make this skip JSON emission while still parsing and validating]', false);
+  .option('--dry-run', '[no-op through slice 4 — every run is effectively dry; slice 5 adds non-dry-run JSON emission]', false);
 
 program.action(async (opts: {
   input: string;
@@ -54,7 +54,7 @@ program.action(async (opts: {
 
     process.stdout.write(renderAuditReport(result.rows, result.summary));
     process.stdout.write(os.EOL);
-    process.stdout.write(`(slice 2: discovery + session-level filter only — no JSON emitted)${os.EOL}`);
+    process.stdout.write(`(slice 3: discovery + filter + parse + post-check — no JSON emitted yet)${os.EOL}`);
   } catch (err) {
     if (err instanceof ConfigMissingError) {
       process.stderr.write(`${err.message}${os.EOL}`);

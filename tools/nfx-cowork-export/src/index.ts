@@ -41,7 +41,11 @@ export {
   type LoadExporterConfigOptions,
 } from "./config.js";
 
-export { discoverSessions } from "./discovery.js";
+export {
+  discoverSessions,
+  classifyTranscriptPath,
+  toPosixPath,
+} from "./discovery.js";
 export { filterSession, matchesAnyPrefix } from "./filter-session.js";
 export {
   buildAuditRows,
@@ -49,8 +53,30 @@ export {
   renderAuditReport,
   type AuditSummary,
 } from "./audit.js";
+
+// Slice 3 — per-event parser + tool-call summaries + post-check
+export {
+  parseTranscript,
+  classifyAndConvert,
+  type ParseResult,
+} from "./parser.js";
+export {
+  extractToolSummary,
+  findExtractor,
+  type ToolSummaryExtractor,
+} from "./tool-summary.js";
+export {
+  postCheckSession,
+  type PostCheckDecision,
+  type PostCheckStats,
+  MIN_EVENTS,
+  MIN_TEXT_CHARS,
+  MIN_CWD_ALLOWED_RATIO,
+} from "./post-check.js";
+
 export {
   runDiscovery,
   type RunDiscoveryOptions,
   type RunDiscoveryResult,
+  type ParsedSession,
 } from "./run-discovery.js";

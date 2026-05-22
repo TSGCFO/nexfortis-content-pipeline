@@ -88,15 +88,17 @@ export type FilterDecision =
   | { keep: false; reason: SessionDropReason; detail?: string };
 
 export type SessionDropReason =
-  | 'family_law_slug'           // slug matched the family-law blocklist
-  | 'scheduled_task'             // initialMessage starts with `<scheduled-task`
-  | 'command_message'            // initialMessage starts with `<command-message`
-  | 'system_path_cwd'            // initialMessage starts with `<system-path-cwd`
-  | 'account_not_allowlisted'    // emailAddress not in account allowlist
-  | 'cwd_always_denied'          // initial cwd starts with an `alwaysDeny` prefix
-  | 'cwd_not_allowed'            // initial cwd doesn't match any allow prefix and isn't sandbox
-  | 'meta_missing'               // no meta JSON sidecar — cannot filter safely
-  | 'no_transcripts';            // walker found no parent transcripts
+  | 'family_law_slug'                    // slug matched the family-law blocklist
+  | 'scheduled_task'                      // initialMessage starts with `<scheduled-task`
+  | 'command_message'                     // initialMessage starts with `<command-message`
+  | 'system_path_cwd'                     // initialMessage starts with `<system-path-cwd`
+  | 'account_not_allowlisted'             // emailAddress not in account allowlist
+  | 'cwd_always_denied'                   // initial cwd starts with an `alwaysDeny` prefix
+  | 'cwd_not_allowed'                     // initial cwd doesn't match any allow prefix and isn't sandbox
+  | 'meta_missing'                        // no meta JSON sidecar — cannot filter safely
+  | 'no_transcripts'                      // walker found no parent transcripts
+  | 'tiny_session'                        // post-filter: <3 events or <500 chars text
+  | 'cwd_majority_outside_allowlist';     // post-filter: <80% of text chars in allowed cwds
 
 /**
  * Resolved configuration for a single exporter run. Loaded from the three

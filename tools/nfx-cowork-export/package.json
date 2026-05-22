@@ -1,6 +1,6 @@
 {
   "name": "@ncp/cowork-export",
-  "version": "0.0.2",
+  "version": "0.0.3",
   "private": true,
   "type": "module",
   "description": "Local CLI that reads Cowork on-disk session data and emits normalized JSON files for the NexFortis content pipeline ingester.",
