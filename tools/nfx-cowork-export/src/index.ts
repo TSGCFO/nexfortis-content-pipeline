@@ -1,9 +1,5 @@
 /**
  * Public surface of the exporter package.
- *
- * The CLI is the primary entrypoint for end users (`nfx-cowork-export ...`),
- * but the library exports here let the validator be used from elsewhere in
- * the pipeline workspace — notably the ingester's pre-flight check.
  */
 
 export {
@@ -26,3 +22,35 @@ export {
   type ValidationResult,
   type ValidationIssue,
 } from "./validator.js";
+
+// Slice 2 — discovery + session filtering surface
+export type {
+  SessionDiscovery,
+  SessionMeta,
+  TranscriptFile,
+  FilterDecision,
+  SessionDropReason,
+  ExporterConfig,
+  AuditRow,
+} from "./types.js";
+
+export {
+  loadExporterConfig,
+  ConfigMissingError,
+  ConfigInvalidError,
+  type LoadExporterConfigOptions,
+} from "./config.js";
+
+export { discoverSessions } from "./discovery.js";
+export { filterSession, matchesAnyPrefix } from "./filter-session.js";
+export {
+  buildAuditRows,
+  summarize,
+  renderAuditReport,
+  type AuditSummary,
+} from "./audit.js";
+export {
+  runDiscovery,
+  type RunDiscoveryOptions,
+  type RunDiscoveryResult,
+} from "./run-discovery.js";
