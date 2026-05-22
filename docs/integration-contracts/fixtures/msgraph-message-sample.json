@@ -1,0 +1,94 @@
+{
+  "_fixture_metadata": {
+    "_description": "Real Microsoft Graph v1.0 /users/{upn}/messages response captured 2026-05-21 from the NexFortis tenant. All PII has been replaced with synthetic placeholders. Structure and field types are unchanged from the real captured response. Use this as the source of truth for unit-test mocks in the MS Graph email ingester.",
+    "_captured_at": "2026-05-21T23:00Z",
+    "_source_endpoint": "GET https://graph.microsoft.com/v1.0/users/{upn}/messages?$top=1",
+    "_auth_mode": "client_credentials (application permissions, Mail.Read)",
+    "_scrubbed_fields": [
+      "@odata.context: real UPN -> user%40example.com",
+      "value[].id: real Base64 blob -> synthetic same-shape blob",
+      "value[].subject: real GitHub notification subject -> synthetic short subject",
+      "value[].bodyPreview: real notification preview -> synthetic matching preview",
+      "value[].body.content: real HTML notification body -> synthetic short HTML",
+      "value[].internetMessageId: real GitHub message ID -> synthetic",
+      "value[].parentFolderId: real Base64 -> synthetic same-shape",
+      "value[].conversationId: real -> synthetic",
+      "value[].conversationIndex: real -> synthetic",
+      "value[].changeKey: real -> synthetic",
+      "value[].webLink: real Outlook URL with real ItemID -> synthetic",
+      "value[].sender/from/toRecipients/ccRecipients/replyTo: real addresses -> example.com placeholders"
+    ]
+  },
+  "@odata.context": "https://graph.microsoft.com/v1.0/$metadata#users('user%40example.com')/messages",
+  "@odata.nextLink": "https://graph.microsoft.com/v1.0/users/user@example.com/messages?%24top=1&%24skip=1",
+  "value": [
+    {
+      "@odata.etag": "W/\"CQAAABYAAACSAMPLEETAGFIXTUREDATA+8a\"",
+      "id": "AAMkSAMPLEMESSAGEIDFIXTURE0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789==",
+      "createdDateTime": "2026-05-21T22:00:14Z",
+      "lastModifiedDateTime": "2026-05-21T22:00:38Z",
+      "changeKey": "CQAAABYAAACSAMPLECHANGEKEYFIXTURE+8a",
+      "categories": [],
+      "receivedDateTime": "2026-05-21T22:00:14Z",
+      "sentDateTime": "2026-05-21T22:00:07Z",
+      "hasAttachments": false,
+      "internetMessageId": "<sample-fixture-message-id@example.com>",
+      "subject": "Sample subject line for fixture",
+      "bodyPreview": "This is a synthetic preview matching the synthetic HTML body below. Approximately 255 characters of plaintext extracted from the body content, used as a snippet in mailbox list views.",
+      "importance": "normal",
+      "parentFolderId": "AQMkSAMPLEPARENTFOLDERIDFIXTURE0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ",
+      "conversationId": "AAQkSAMPLECONVERSATIONIDFIXTURE0123456789ABCDEFGHIJKLMN==",
+      "conversationIndex": "AQHSAMPLECONVERSATIONINDEXFIXTURE==",
+      "isDeliveryReceiptRequested": null,
+      "isReadReceiptRequested": false,
+      "isRead": false,
+      "isDraft": false,
+      "webLink": "https://outlook.office365.com/owa/?ItemID=SAMPLE%2FFIXTURE%2FITEMID&exvsurl=1&viewmodel=ReadMessageItem",
+      "inferenceClassification": "other",
+      "body": {
+        "contentType": "html",
+        "content": "<html><head><meta http-equiv=\"Content-Type\" content=\"text/html; charset=utf-8\"></head><body><p>This is a synthetic email body used as a test fixture. It mimics the structure of a real HTML email returned by Microsoft Graph but contains no real content.</p><p>The pipeline should strip these HTML tags before redaction.</p></body></html>"
+      },
+      "sender": {
+        "emailAddress": {
+          "name": "Sample Sender",
+          "address": "sender@example.com"
+        }
+      },
+      "from": {
+        "emailAddress": {
+          "name": "Sample Sender",
+          "address": "sender@example.com"
+        }
+      },
+      "toRecipients": [
+        {
+          "emailAddress": {
+            "name": "Sample User",
+            "address": "user@example.com"
+          }
+        }
+      ],
+      "ccRecipients": [
+        {
+          "emailAddress": {
+            "name": "Sample Recipient Two",
+            "address": "recipient2@example.com"
+          }
+        }
+      ],
+      "bccRecipients": [],
+      "replyTo": [
+        {
+          "emailAddress": {
+            "name": "Sample Reply Address",
+            "address": "reply@example.com"
+          }
+        }
+      ],
+      "flag": {
+        "flagStatus": "notFlagged"
+      }
+    }
+  ]
+}

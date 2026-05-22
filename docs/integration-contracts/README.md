@@ -30,14 +30,16 @@ When a vendor changes their API, the contract is updated in a dedicated PR befor
 
 ## Current contracts
 
-| File | API | Source resource | Used by |
+| File | API | Source resource | Consumed by (in `capture-worker`) |
 |---|---|---|---|
-| [msgraph-message.md](./msgraph-message.md) | Microsoft Graph v1.0 | `Message` (Outlook email) | `artifacts/capture-worker/src/jobs/ingest-msgraph-email/` (planned) |
-| _(future)_ msgraph-call-transcript.md | Microsoft Graph v1.0 beta | `callTranscript` | `artifacts/capture-worker/src/jobs/ingest-teams-transcripts/` (planned) |
-| _(future)_ telegram-message.md | Telegram Bot API | `Message` + `Voice` | `artifacts/capture-worker/src/jobs/ingest-telegram-voice/` (planned) |
-| _(future)_ claude-export-conversation.md | Anthropic account export | `conversation` JSON shape | `artifacts/capture-worker/src/jobs/ingest-claude/` (planned) |
-| _(future)_ claude-cowork-conversation.md | Claude Co-Work / Claude Code local files | _(format TBD pending research)_ | local exporter tool (planned) |
-| _(future)_ sanity-draft.md | Sanity Content API | `post` document | `artifacts/sanity-bridge/` (planned) |
+| [msgraph-message.md](./msgraph-message.md) + [fixtures/msgraph-message-sample.json](./fixtures/msgraph-message-sample.json) | Microsoft Graph v1.0 | `Message` (Outlook email) | MS Graph email ingester job |
+| _(future)_ msgraph-call-transcript.md | Microsoft Graph v1.0 beta | `callTranscript` | Teams transcripts ingester job |
+| _(future)_ telegram-message.md | Telegram Bot API | `Message` + `Voice` | Telegram voice ingester job |
+| _(future)_ claude-export-conversation.md | Anthropic account export | `conversation` JSON shape | Claude cloud-export ingester job |
+| _(future)_ claude-cowork-conversation.md | Claude Co-Work / Claude Code local files | _(format TBD pending research)_ | Local exporter tool |
+| _(future)_ sanity-draft.md | Sanity Content API | `post` document | `sanity-bridge` service |
+
+**On directory vs file naming:** the v2 planning docs (e.g. `capture-synthesis-layer/prd.md`) sometimes refer to ingester jobs by a single-file shorthand like `ingest-msgraph-email.ts`. In practice each ingester needs multiple files (parser, fetcher, processor, checkpoint, types, errors) so the actual on-disk layout for each job is a directory: `artifacts/capture-worker/src/jobs/ingest-msgraph-email/`. This table uses the conceptual job name (e.g. "MS Graph email ingester job") rather than a specific path to avoid drift between this directory and the plan docs. Concrete file paths are listed in the corresponding ingester prompt and Feature PRD.
 
 ## Updating a contract
 
