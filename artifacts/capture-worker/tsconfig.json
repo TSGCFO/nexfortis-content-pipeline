@@ -5,5 +5,10 @@
     "outDir": "dist"
   },
   "include": ["src/**/*"],
-  "references": [{ "path": "../../lib/logger" }]
+  "references": [
+    { "path": "../../lib/logger" },
+    { "path": "../../lib/db" },
+    { "path": "../../lib/embeddings" },
+    { "path": "../../lib/redaction" }
+  ]
 }

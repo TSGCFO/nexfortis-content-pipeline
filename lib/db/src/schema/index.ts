@@ -14,6 +14,7 @@ export {
   type GateAFailure,
   type SeowindBrief,
 } from './drafts.js';
+export { ingestCheckpoints } from './ingest-checkpoints.js';
 export {
   interviewSessions,
   sessionStatusEnum,
