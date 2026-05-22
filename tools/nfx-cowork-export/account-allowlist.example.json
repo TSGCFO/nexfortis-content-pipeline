@@ -1,0 +1,10 @@
+{
+  "_comment": "Account-level allowlist. The exporter reads each session's account field from its meta-JSON sidecar and only proceeds if the account appears in 'accounts' below. Useful for excluding personal Cowork spaces while keeping work-account ones. Copy this file to ~/.config/nfx-cowork-export/account-allowlist.json (or Windows equivalent) and replace the example addresses with your real accounts.",
+
+  "_matching": "Case-insensitive exact match against the meta-JSON 'emailAddress' field. No wildcards in v1.",
+
+  "accounts": [
+    "hassan@example.test",
+    "h.sadiq@nexfortis.example"
+  ]
+}

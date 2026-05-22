@@ -10,6 +10,7 @@
     { "path": "./artifacts/synthesis-worker" },
     { "path": "./artifacts/telegram-bot" },
     { "path": "./artifacts/gate-worker" },
-    { "path": "./artifacts/sanity-bridge" }
+    { "path": "./artifacts/sanity-bridge" },
+    { "path": "./tools/nfx-cowork-export" }
   ]
 }

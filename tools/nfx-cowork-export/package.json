@@ -1,0 +1,33 @@
+{
+  "name": "@ncp/cowork-export",
+  "version": "0.0.1",
+  "private": true,
+  "type": "module",
+  "description": "Local CLI that reads Cowork on-disk session data and emits normalized JSON files for the NexFortis content pipeline ingester.",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "bin": {
+    "nfx-cowork-export": "./dist/cli.js"
+  },
+  "files": [
+    "dist",
+    "cwd-allowlist.example.json",
+    "family-law-slugs.example.json",
+    "account-allowlist.example.json",
+    "README.md",
+    "CHANGELOG.md"
+  ],
+  "scripts": {
+    "build": "tsc --build",
+    "typecheck": "tsc --build"
+  },
+  "dependencies": {
+    "zod": "3.23.8"
+  }
+}

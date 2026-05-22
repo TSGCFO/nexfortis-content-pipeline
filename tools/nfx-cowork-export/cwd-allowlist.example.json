@@ -1,0 +1,23 @@
+{
+  "_comment": "Copy this file to ~/.config/nfx-cowork-export/cwd-allowlist.json (or the Windows equivalent), then edit the prefix lists to fit your environment. The exporter refuses to run if no cwd-allowlist.json is found — this is intentional (fail-closed posture against accidentally ingesting non-IT-work sessions).",
+
+  "_three_buckets": {
+    "alwaysAllow": "Path prefixes that are unconditionally allowed. Typically the Cowork sandbox path '/sessions/' — events inside Cowork's own sandbox are filtered separately by the slug blocklist.",
+    "allowPrefixes": "Path prefixes for your real laptop folders that you want ingested. Be specific: list only the project folders relevant to NexFortis pillar work.",
+    "alwaysDeny": "Path prefixes that are unconditionally denied even if they'd otherwise match. Typically Cowork's internal-data folder to keep scheduled-task and meta-session noise out."
+  },
+
+  "alwaysAllow": [
+    "/sessions/"
+  ],
+
+  "allowPrefixes": [
+    "C:\\Users\\HassanSadiq\\Projects\\nexfortis content pipeline",
+    "C:\\Users\\HassanSadiq\\Projects\\NexFortis-Website-Design-pro",
+    "C:\\Users\\HassanSadiq\\Projects\\live-site-verifier"
+  ],
+
+  "alwaysDeny": [
+    "C:\\Users\\HassanSadiq\\AppData\\Roaming\\Claude\\"
+  ]
+}

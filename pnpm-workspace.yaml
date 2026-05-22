@@ -1,3 +1,4 @@
 packages:
   - 'artifacts/*'
   - 'lib/*'
+  - 'tools/*'
