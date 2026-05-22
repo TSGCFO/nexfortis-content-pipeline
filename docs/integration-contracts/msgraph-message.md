@@ -64,10 +64,17 @@ Pipeline path: `recipient.emailAddress.address` is what we hash and feed to the 
 
 ## Sub-resource: `itemBody`
 
+The `itemBody` resource has exactly two properties:
+
+- `content` — string
+- `contentType` — enum, one of `"text"` or `"html"`
+
+Example (valid JSON — the real value of `contentType` is one of the two enum values shown above, not the union expression):
+
 ```json
 {
-  "content": "string",
-  "contentType": "text" | "html"
+  "content": "<p>Hi — quick follow-up on Monday's call.</p>",
+  "contentType": "html"
 }
 ```
 
@@ -122,93 +129,38 @@ GET /users/{upn}/messages
   &$orderby=sentDateTime asc
 ```
 
-(Cursor's prompt 3b currently does NOT use `$select`. That's acceptable for the first PR — Graph returns the same fields anyway — but is a worthwhile efficiency improvement for a follow-up PR.)
+**Why filter on `sentDateTime` rather than `receivedDateTime`:** The pipeline reads Hassan's own mailbox, which contains both received messages (Inbox) and sent messages (Sent Items). `sentDateTime` is set on **both** — it is the moment the original sender (Hassan for outbound, the counterparty for inbound) released the message. `receivedDateTime` is only meaningful for messages that arrived in the mailbox (it's the moment Exchange recorded delivery into Hassan's inbox). Using `sentDateTime` gives a single uniform timestamp across both folders, which keeps the checkpoint logic simple and matches the `captured_at` semantics in `capture_signals` ("when did this content come into existence," not "when did it arrive in storage"). The capture-synthesis-layer planning PRD originally specified `receivedDateTime` for the inbox-only path; that guidance is superseded by this contract once the worker is implemented against this contract.
+
+(Prompt 3b's original version did NOT use `$select`. The follow-up implementation of prompt 3b should adopt the `$select` projection above.)
 
 ---
 
-## Sample Real-World Response Shape (Anonymized)
+## Sample Real-World Response Shape
 
-```json
-{
-  "@odata.context": "https://graph.microsoft.com/v1.0/$metadata#users('hassan%40hassansadiq.onmicrosoft.com')/messages",
-  "@odata.nextLink": "https://graph.microsoft.com/v1.0/users/...$skiptoken=...",
-  "value": [
-    {
-      "@odata.etag": "W/\"CQAAABYAAAB...\"",
-      "id": "AAMkAGI...long-base64-string...AAA=",
-      "createdDateTime": "2026-05-11T18:32:11Z",
-      "lastModifiedDateTime": "2026-05-11T18:32:14Z",
-      "changeKey": "CQAAABYAAAB...",
-      "categories": [],
-      "receivedDateTime": "2026-05-11T18:32:13Z",
-      "sentDateTime": "2026-05-11T18:32:10Z",
-      "hasAttachments": false,
-      "internetMessageId": "<example-id@mail.example.com>",
-      "subject": "Re: Conditional Access policy for iOS",
-      "bodyPreview": "Hi Hassan — quick follow-up on the AADSTS50158 issue...",
-      "importance": "normal",
-      "parentFolderId": "AQMkAGI0MDhmZmYxLTk5Nm...",
-      "conversationId": "AAQkAGI0MDhmZmY...",
-      "conversationIndex": "AQHcab9G...",
-      "isDeliveryReceiptRequested": false,
-      "isReadReceiptRequested": false,
-      "isRead": true,
-      "isDraft": false,
-      "webLink": "https://outlook.office365.com/owa/?ItemID=AAMkAGI...",
-      "inferenceClassification": "focused",
-      "body": {
-        "contentType": "html",
-        "content": "<html><body><p>Hi Hassan — quick follow-up on the AADSTS50158 issue we discussed. The Named Locations fix worked for the recruiter; she's back in the Authenticator app now.</p><p>One thing to confirm — should we apply the same exclusion to the Talencor staff group, or only to verified mobile devices?</p></body></html>"
-      },
-      "sender": {
-        "emailAddress": {
-          "name": "Example Sender",
-          "address": "sender@example.com"
-        }
-      },
-      "from": {
-        "emailAddress": {
-          "name": "Example Sender",
-          "address": "sender@example.com"
-        }
-      },
-      "toRecipients": [
-        {
-          "emailAddress": {
-            "name": "Hassan Sadiq",
-            "address": "hassan@hassansadiq.onmicrosoft.com"
-          }
-        }
-      ],
-      "ccRecipients": [],
-      "bccRecipients": [],
-      "replyTo": [],
-      "flag": {
-        "flagStatus": "notFlagged"
-      }
-    }
-  ]
-}
-```
+**Authoritative fixture:** [`./fixtures/msgraph-message-sample.json`](./fixtures/msgraph-message-sample.json)
 
-**Notable observations from this real shape that the pipeline must handle:**
+That file is the committed, scrubbed copy of a real `GET /users/{upn}/messages?$top=1` response captured from the NexFortis tenant on 2026-05-21. All personal identifiers have been replaced with synthetic placeholders (see the `_fixture_metadata` block at the top of the file for the exact scrubbing log). Field shape, types, and structural details (including `@odata.context`, `@odata.etag`, `@odata.nextLink`, empty array conventions, and `null` handling for `isDeliveryReceiptRequested`) are preserved exactly as Graph returned them.
 
-1. The response wraps results in `value` array and includes `@odata.context` / `@odata.nextLink` siblings. Tests must mock this envelope, not just bare message arrays.
-2. `body.content` is HTML by default for almost all real-world mail. Plain-text emails are rare. HTML stripping is the common path.
-3. `@odata.etag` and `@odata.context`-prefixed fields appear on every message and must be ignored without failing strict schema validation.
-4. `categories` is an empty array on most messages but is technically present. Out of scope.
-5. `from.emailAddress.address` is lowercase by convention but Graph does not normalize — the pipeline's redaction module already lowercases before hashing, which handles this correctly.
-6. The display `name` field on recipients can be set to anything by the sender — never use it for any logic decision (it's adversarial input).
-7. `isDraft: false` is the common case. `isDraft: true` means the message lives in Drafts and shouldn't be ingested.
+Unit-test mocks for the MS Graph email ingester MUST be built against this fixture rather than against handwritten approximations. When the fixture needs to evolve (because a new field becomes relevant, or Microsoft adds something), it gets updated in a dedicated PR that also updates this contract and any consumers.
+
+A short inline summary of the structurally-notable fields is below for quick reference. For the full shape, read the JSON fixture.
+
+- Top-level envelope: `{ "@odata.context": ..., "@odata.nextLink": ..., "value": [Message, ...] }`. Tests must mock this envelope, not a bare message array.
+- Every message has `@odata.etag`. Treat as opaque, ignore.
+- `body.contentType` is `"html"` in practice for almost all real-world mail. Plain-text emails are rare. HTML stripping is the common code path.
+- `categories` is typically an empty array but is always present. Out of scope for ingestion.
+- `from.emailAddress.address` is lowercase by convention but Graph does not normalize; the redaction module's blocklist lowercases before hashing.
+- `name` fields on recipient sub-objects can be set to anything by the sender — never use them for logic decisions (adversarial input).
+- `isDraft: false` is the common case; `isDraft: true` means the message lives in Drafts and is skipped by the ingester.
+- `isDeliveryReceiptRequested` may come back as `null` (not `false`) on some messages — Graph does not normalize this. Treat any non-`true` value as "not requested."
 
 ---
 
 ## What to Do With This Document
 
-1. **Right now:** I cross-check the actively-running prompt 3b PR (when it opens) against this contract. Any mismatch is a review blocker.
-2. **For unit tests:** the `__fixtures__/sample-message.json` file in prompt 3b must conform to this shape exactly. If the agent produced a fixture that doesn't include the full envelope structure or uses a different path for any field, that's caught in review.
-3. **For integration tests (Prompt 3b-int, future):** the smoke test asserts that a real Graph response from `hassan@hassansadiq.onmicrosoft.com`'s mailbox matches this contract. If Microsoft ever changes a field name, the smoke test fails immediately rather than silently corrupting the corpus.
-4. **For Teams transcripts (Prompt 3c, future):** I do the same exercise — fetch the Teams transcript resource schema before writing the prompt, build a sister contract document.
-5. **For Telegram, Perplexity Spaces, etc.:** same pattern. Schema first, prompt second.
+1. **For new ingester prompts:** the prompt's `Spec reference` section must link to this contract. The unit-test mocks specified in the prompt must use `./fixtures/msgraph-message-sample.json` as their source of truth (loaded into the test, not hand-rewritten in test code).
+2. **For PR reviews:** strategist cross-checks the diff against this contract. Any mismatch between extracted-field-paths in code and dotted paths in this contract is a review blocker.
+3. **For integration tests (future):** the smoke test asserts that a fresh `GET /users/{upn}/messages` response from the real tenant still matches every field documented here. If Microsoft changes a field name, the smoke test fails immediately rather than silently corrupting the corpus.
+4. **For Teams transcripts, Telegram, Perplexity Spaces, etc.:** repeat the same exercise — fetch the official schema, capture one real response, scrub it, commit alongside a sister contract document. Schema first, prompt second.
 
 This document is updated whenever a pipeline change starts using a new field, stops using a tracked field, or detects a schema change in the upstream API.
