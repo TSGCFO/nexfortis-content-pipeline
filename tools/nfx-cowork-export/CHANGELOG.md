@@ -18,6 +18,32 @@ Each released version has the following subsections (omit any that are empty):
 
 ## [Unreleased]
 
+### Tool (slice 3 — per-event filter + tool-call summary registry + post-check; no schemaVersion bump)
+
+Reads each kept session's parent transcripts, applies the per-event filter table from the locked spec, converts raw lines into the v1 `Event[]` shape, and applies two post-filter checks. No JSON is emitted yet — that's slice 5.
+
+- **Per-event filter and normalizer (`src/parser.ts`).** Streams JSONL line by line via `node:readline`. Drops queue-operation / last-prompt / ai-title / attachment / system (every subtype) / progress / thinking events. Keeps user_text (string content), drops user events with tool_result list content or `isMeta: true`. Converts assistant text blocks to `assistant_text` events and assistant tool_use blocks to `tool_call` events with optional summary. Multi-block assistant lines emit one event per kept block with synthesized child UUIDs.
+- **`local_command` system subtype confirmed dropped.** Per Perplexity's slice-2 review confirmation, all `system` events drop regardless of subtype.
+- **Tool-call summary registry (`src/tool-summary.ts`).** Ten bespoke extractors per the locked spec: Bash + `mcp__workspace__bash` (first command line), Edit/Write/Read (file_path), `mcp__Claude_in_Chrome__navigate` + WebFetch + `mcp__workspace__web_fetch` (URL), WebSearch + `mcp__*__search` regex (query), Glob/Grep (pattern), `mcp__cowork__present_files` (joined file paths), TaskCreate/TaskUpdate (subject), AskUserQuestion (first question text). Every summary capped at 80 chars. Tools without a registered extractor emit `tool_call` with no `summary` field at all — no generic placeholder per the spec.
+- **Post-filter checks (`src/post-check.ts`).** Two rules: tiny-session (drop sessions with <3 events OR <500 chars of user_text + assistant_text text) and cwd-majority (drop sessions where <80% of text chars are in allowlisted cwds, using `matchesAnyPrefix` against the same alwaysAllow / allowPrefixes / alwaysDeny buckets as slice 2). Tool-call events have a cwd but no text — they're excluded from both numerator and denominator. Events with no cwd are ignored in the ratio (the session-level pre-check from slice 2 already vetted them).
+- **Bad-line handling.** Parser skips unparseable lines and counts them. If >5% of a file's lines fail to parse, the file is abandoned (empty events array returned, abandonment flagged in the audit).
+- **Orchestrator updated.** `runDiscovery()` now parses each kept session's parent transcripts, runs post-check, surfaces tiny_session and cwd_majority_outside_allowlist as additional drop reasons in the audit. The returned `ParsedSession[]` carries `events` + `postCheck` + parse stats per session, ready for slice 5 to serialize.
+- **Two new drop reasons surface in the audit summary:** `tiny_session`, `cwd_majority_outside_allowlist`.
+
+### Real-data sanity check
+
+Against the full 65-session Cowork backup:
+- 61 sessions discovered, 31 kept after session+post filtering
+- 12 dropped as scheduled_task, 15 as cwd_always_denied (Cowork-internal-data sessions), 3 as tiny_session
+- Average events/line ratio across kept sessions: ~42% (higher than slice 1's 7% estimate because slice 3 also keeps `tool_call` events, which slice 1's analysis classified as throw)
+- Biggest kept sessions: `cool-great-franklin` (4605 lines → 1800 events), `friendly-zealous-galileo` (4081 → 1603), `zen-nifty-fermat` (3118 → 1244)
+
+### Tests added (69 new — workspace total 304 → ?)
+
+- `tests/cowork-export/tool-summary.test.ts` — 28 tests across all 10 extractors + unknown-tool fallthrough + whitespace and 80-char ceiling.
+- `tests/cowork-export/parser.test.ts` — 31 tests covering every line in the per-event filter table, multi-block assistant lines, child-UUID synthesis, the bad-line policy (under-5%, over-5%, threshold), empty-line tolerance.
+- `tests/cowork-export/post-check.test.ts` — 10 tests covering tiny-session thresholds, cwd-majority math (under 80, exactly 80, no-cwd events excluded from ratio, all-deny vs all-allow), alwaysDeny precedence over alwaysAllow, edge cases including empty event list.
+
 ### Tool (slice 2 — discovery + session-level filter + dry-run CLI; no schemaVersion bump)
 
 This slice does not change the shape of emitted JSON — no JSON is emitted yet. It adds the file walker and the session-level filter pipeline. Output is a dry-run audit report to stdout. Per-event filtering and JSON emission come in slices 3-5.

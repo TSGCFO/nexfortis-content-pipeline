@@ -49,6 +49,8 @@ const ALL_DROP_REASONS: readonly SessionDropReason[] = [
   'cwd_not_allowed',
   'meta_missing',
   'no_transcripts',
+  'tiny_session',
+  'cwd_majority_outside_allowlist',
 ] as const;
 
 export function summarize(rows: ReadonlyArray<{ decision: FilterDecision }>): AuditSummary {
