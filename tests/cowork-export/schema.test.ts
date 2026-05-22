@@ -239,3 +239,125 @@ describe("sessionSchema — invalid documents", () => {
     expect(sessionSchema.safeParse(doc).success).toBe(false);
   });
 });
+
+describe("sessionSchema — strict mode (rejects unknown fields)", () => {
+  it("rejects an unknown field on the top-level document", () => {
+    const doc = { ...minimalValidSession, rogueExtraField: "should be rejected" };
+    expect(sessionSchema.safeParse(doc).success).toBe(false);
+  });
+
+  it("rejects an unknown field on the _exporter block", () => {
+    const doc = {
+      ...minimalValidSession,
+      _exporter: { ...minimalValidSession._exporter, extraProvenance: "leak" },
+    };
+    expect(sessionSchema.safeParse(doc).success).toBe(false);
+  });
+
+  it("rejects an unknown field on a user_text event (e.g. typo 'txt' instead of 'text')", () => {
+    const doc = {
+      ...minimalValidSession,
+      events: [
+        {
+          kind: "user_text",
+          ts: "2026-04-08T14:23:11.000Z",
+          uuid: "evt-001",
+          text: "hi",
+          txt: "this typo should be rejected, not silently dropped",
+        },
+      ],
+    };
+    expect(sessionSchema.safeParse(doc).success).toBe(false);
+  });
+
+  it("rejects an unknown field on an assistant_text event", () => {
+    const doc = {
+      ...minimalValidSession,
+      events: [
+        {
+          kind: "assistant_text",
+          ts: "2026-04-08T14:23:11.000Z",
+          uuid: "evt-001",
+          text: "hi",
+          unexpectedExtra: "x",
+        },
+      ],
+    };
+    expect(sessionSchema.safeParse(doc).success).toBe(false);
+  });
+
+  it("rejects an unknown field on a tool_call event", () => {
+    const doc = {
+      ...minimalValidSession,
+      events: [
+        {
+          kind: "tool_call",
+          ts: "2026-04-08T14:23:11.000Z",
+          uuid: "evt-001",
+          tool: "Bash",
+          extraArg: "should fail",
+        },
+      ],
+    };
+    expect(sessionSchema.safeParse(doc).success).toBe(false);
+  });
+
+  it("rejects an unknown field on a subagent event", () => {
+    const doc = {
+      ...minimalValidSession,
+      events: [
+        {
+          kind: "subagent",
+          ts: "2026-04-08T14:23:11.000Z",
+          uuid: "evt-001",
+          subagentSlug: "agent-x",
+          parentToolUseId: "toolu_x",
+          events: [],
+          extraField: "no",
+        },
+      ],
+    };
+    expect(sessionSchema.safeParse(doc).success).toBe(false);
+  });
+
+  it("rejects an unknown field on a nested subagent's event", () => {
+    const doc = {
+      ...minimalValidSession,
+      events: [
+        {
+          kind: "subagent",
+          ts: "2026-04-08T14:23:11.000Z",
+          uuid: "evt-outer",
+          subagentSlug: "agent-x",
+          parentToolUseId: "toolu_x",
+          events: [
+            {
+              kind: "assistant_text",
+              ts: "2026-04-08T14:23:12.000Z",
+              uuid: "evt-inner",
+              text: "hi",
+              rogueNested: "should also be rejected",
+            },
+          ],
+        },
+      ],
+    };
+    expect(sessionSchema.safeParse(doc).success).toBe(false);
+  });
+});
+
+describe("sessionSchema — continuationGroupId rules", () => {
+  it("accepts a non-empty continuationGroupId", () => {
+    const doc = { ...minimalValidSession, continuationGroupId: "sha256:abc123" };
+    expect(sessionSchema.safeParse(doc).success).toBe(true);
+  });
+
+  it("accepts a document without continuationGroupId at all", () => {
+    expect(sessionSchema.safeParse(minimalValidSession).success).toBe(true);
+  });
+
+  it("rejects an empty-string continuationGroupId (empty is a bug, not 'no group')", () => {
+    const doc = { ...minimalValidSession, continuationGroupId: "" };
+    expect(sessionSchema.safeParse(doc).success).toBe(false);
+  });
+});
