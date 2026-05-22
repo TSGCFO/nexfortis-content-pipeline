@@ -22,9 +22,11 @@ This tool walks the local Cowork data folder, filters out family-law content, sc
 | Post-filter checks (tiny-session + cwd-majority) | ✅ slice 3 |
 | Subagent stitching (recursive, non-acompact only) | ✅ slice 4 |
 | Auto-continuation scaffold strip + `continuationGroupId` | ✅ slice 4 |
-| PII regex pass (shared `@ncp/redaction`) | ⏳ slice 5 |
-| CLI wrapper (`--input`, `--output`, `--dry-run`, etc.) | ⏳ slice 5 |
-| Audit log (stdout + sidecar) | ⏳ slice 5 |
+| PII regex pass (shared `@ncp/redaction`) | ✅ slice 5 |
+| JSON emission (atomic write, schema-validated, one file per transcript) | ✅ slice 5 |
+| CLI wrapper (`--input`, `--output`, `--dry-run`, `--validate-output`, etc.) | ✅ slice 5 |
+| Audit log (stdout + sidecar `_audit-<ts>.txt`) | ✅ slice 5 |
+| OS-specific config-path defaults (Windows / Linux / macOS) | ✅ slice 5 |
 | Single-binary packaging via `bun build --compile` | ⏳ slice 6 |
 
 ## Install
@@ -36,7 +38,7 @@ pnpm install
 pnpm --filter @ncp/cowork-export build
 ```
 
-## Quick start (planned, not yet functional)
+## Quick start
 
 ```powershell
 # 1. Create your allowlist files (one-time).
@@ -65,7 +67,7 @@ Three configuration files live outside the repo so personal data never lands in 
 
 The example files in this directory document the shape of each. The exporter ships **fail-closed** — if `cwd-allowlist.json` does not exist, the tool refuses to run and prints the example path.
 
-## CLI surface (planned)
+## CLI surface
 
 ```
 nfx-cowork-export
@@ -82,6 +84,44 @@ nfx-cowork-export
 ## Output schema
 
 See `src/schema.ts` for the source-of-truth zod schema, and `CHANGELOG.md` for the version history.
+
+## Audit log
+
+Every run writes a human-readable audit report to stdout AND to a sidecar file
+`<output-dir>/_audit-<ISO-timestamp>.txt`. The sidecar persists run history so
+you can answer questions like "what got dropped last Tuesday" without re-running.
+The audit covers:
+
+- Total sessions discovered + kept + dropped-by-reason
+- Per-session compression ratios (lines in → events out)
+- Per-account and per-source-branch counts of kept sessions
+- Family-law slug matches (SHA-256 hashes only — slugs never logged)
+- Parse failures (counted, file abandoned if >5% of lines fail to parse)
+- PII redaction summary by type (email / phone / cc / ipv4 / ipv6)
+- JSON emission stats (files written + validation failures)
+
+## Exit codes
+
+| Code | Meaning |
+|---|---|
+| 0 | Success |
+| 1 | Unhandled error |
+| 2 | Missing config file (one of the three allowlists) |
+| 3 | Invalid config file (JSON parse error or shape mismatch) |
+| 4 | At least one emitted file failed schema validation, or `--validate-output` target failed |
+| 5 | No kept sessions (entire input filtered out — usually an allowlist misconfiguration) |
+
+## Standalone validation
+
+To check that a previously emitted file still validates against the v1 schema
+(useful after pulling new ingester code that bumped its expectations):
+
+```bash
+nfx-cowork-export --validate-output path/to/some-session.json
+```
+
+Exits 0 on pass, 4 on fail. Prints sessionId + event count on pass, schema
+error path on fail.
 
 ## Read-only
 
