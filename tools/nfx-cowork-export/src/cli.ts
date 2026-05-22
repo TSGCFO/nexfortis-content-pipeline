@@ -31,7 +31,7 @@ program
   .requiredOption('--cwd-allowlist <path>', 'Path to cwd-allowlist.json (see cwd-allowlist.example.json)')
   .requiredOption('--family-law-blocklist <path>', 'Path to family-law-slugs.json (see family-law-slugs.example.json)')
   .requiredOption('--account-allowlist <path>', 'Path to account-allowlist.json (see account-allowlist.example.json)')
-  .option('--dry-run', 'In slice 2 this flag is implicit; reserved for slice 5+', false);
+  .option('--dry-run', '[reserved — no-op in slice 2; slice 5+ will make this skip JSON emission while still parsing and validating]', false);
 
 program.action(async (opts: {
   input: string;

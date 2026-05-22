@@ -223,3 +223,106 @@ describe('discoverSessions — edge cases', () => {
     expect(found).toEqual([]);
   });
 });
+
+import {
+  classifyTranscriptPath,
+  toPosixPath,
+} from '../../tools/nfx-cowork-export/src/discovery.js';
+
+describe('toPosixPath', () => {
+  it('replaces backslashes with forward slashes', () => {
+    expect(toPosixPath('C:\\Users\\Hassan\\foo')).toBe('C:/Users/Hassan/foo');
+  });
+
+  it('leaves forward-slash paths untouched', () => {
+    expect(toPosixPath('/sessions/foo/bar')).toBe('/sessions/foo/bar');
+  });
+
+  it('handles mixed separators', () => {
+    expect(toPosixPath('C:\\Users/Hassan\\foo')).toBe('C:/Users/Hassan/foo');
+  });
+});
+
+describe('classifyTranscriptPath — POSIX-style paths', () => {
+  it('classifies a parent transcript', () => {
+    const result = classifyTranscriptPath(
+      '/tmp/local_abc/.claude/projects/-sessions-my-slug/uuid-1.jsonl'
+    );
+    expect(result).not.toBeNull();
+    expect(result!.slug).toBe('my-slug');
+    expect(result!.isSubagent).toBe(false);
+    expect(result!.isAcompact).toBe(false);
+  });
+
+  it('classifies a subagent transcript', () => {
+    const result = classifyTranscriptPath(
+      '/tmp/local_abc/.claude/projects/-sessions-my-slug/uuid-1/subagents/agent-xyz.jsonl'
+    );
+    expect(result).not.toBeNull();
+    expect(result!.isSubagent).toBe(true);
+    expect(result!.isAcompact).toBe(false);
+  });
+
+  it('classifies an acompact file by filename', () => {
+    const result = classifyTranscriptPath(
+      '/tmp/local_abc/.claude/projects/-sessions-my-slug/agent-acompact-xyz.jsonl'
+    );
+    expect(result).not.toBeNull();
+    expect(result!.isAcompact).toBe(true);
+  });
+
+  it('returns null for audit.jsonl', () => {
+    expect(classifyTranscriptPath('/tmp/local_abc/audit.jsonl')).toBeNull();
+  });
+
+  it('returns null for a .jsonl outside any projects/ directory', () => {
+    expect(classifyTranscriptPath('/tmp/local_abc/some-other.jsonl')).toBeNull();
+  });
+});
+
+describe('classifyTranscriptPath — WINDOWS-style paths (regression test)', () => {
+  // This is the regression that slipped through slice 2's initial review:
+  // `filePath.includes('/projects/')` returns false on Windows because
+  // path.sep === '\\'. Below the entire path uses backslashes — if the
+  // classifier still works, the bug is fixed.
+
+  it('classifies a parent transcript with backslash separators', () => {
+    const result = classifyTranscriptPath(
+      'C:\\Users\\HassanSadiq\\AppData\\Roaming\\Claude\\local-agent-mode-sessions\\ws\\sp\\local_abc\\.claude\\projects\\-sessions-my-slug\\uuid-1.jsonl'
+    );
+    expect(result).not.toBeNull();
+    expect(result!.slug).toBe('my-slug');
+    expect(result!.isSubagent).toBe(false);
+    expect(result!.isAcompact).toBe(false);
+  });
+
+  it('classifies a subagent transcript with backslash separators', () => {
+    const result = classifyTranscriptPath(
+      'C:\\foo\\local_abc\\.claude\\projects\\-sessions-my-slug\\uuid-1\\subagents\\agent-xyz.jsonl'
+    );
+    expect(result).not.toBeNull();
+    expect(result!.isSubagent).toBe(true);
+  });
+
+  it('classifies an acompact file with backslash separators', () => {
+    const result = classifyTranscriptPath(
+      'C:\\foo\\local_abc\\.claude\\projects\\-sessions-my-slug\\agent-acompact-xyz.jsonl'
+    );
+    expect(result).not.toBeNull();
+    expect(result!.isAcompact).toBe(true);
+  });
+
+  it('handles mixed separators in a single path', () => {
+    const result = classifyTranscriptPath(
+      'C:\\foo/local_abc\\.claude/projects\\-sessions-mixed/uuid.jsonl'
+    );
+    expect(result).not.toBeNull();
+    expect(result!.slug).toBe('mixed');
+  });
+
+  it('returns null for audit.jsonl in a Windows path', () => {
+    expect(
+      classifyTranscriptPath('C:\\foo\\local_abc\\audit.jsonl')
+    ).toBeNull();
+  });
+});

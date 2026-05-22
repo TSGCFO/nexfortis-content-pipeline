@@ -26,6 +26,17 @@
  * Some sessions ("ditto" / scheduled-task runs) have their transcripts in a
  * different layout — under `agent/local_ditto_<id>/.claude/projects/...`. The
  * walker handles both layouts; downstream filters categorize them.
+ *
+ * ## Platform note: path separators
+ *
+ * Cowork data exists on both Windows (Hassan's primary environment, `\` as
+ * separator) and Linux/macOS (CI, sandbox, future contractors, `/` as
+ * separator). To avoid any platform-dependent surprises, the matchers in this
+ * module operate on a **forward-slash-normalized** copy of each absolute
+ * path. The actual `fs` calls use the original native-separator path. This
+ * was a real Windows-only bug found by review on slice 2 — the literal
+ * `.includes('/projects/')` would always be false on Windows. The
+ * `toPosixPath()` helper exists specifically to prevent that class of bug.
  */
 
 import { promises as fs } from 'node:fs';
@@ -37,14 +48,17 @@ import type { SessionDiscovery, SessionMeta, TranscriptFile } from './types.js';
  * Top-level entry point: scan a Cowork data root and return one
  * `SessionDiscovery` per session folder.
  *
- * Recursive depth-bounded. Does not follow symlinks. Skips directories it
- * can't read with a warning to stderr (does not throw).
+ * Recursive depth-bounded (`maxDepth = 4`). Does not follow symlinks. Skips
+ * directories it can't read with a warning to stderr (does not throw).
+ *
+ * Why `maxDepth = 4`? Cowork session folders sit either 3 directory levels
+ * down from a live data root (`<root>/<workspace-uuid>/<space-uuid>/local_<id>/`)
+ * or 4 levels down from an exported backup root that adds a
+ * `raw-backup-<timestamp>/` wrapper. A bound of 4 covers both layouts.
  */
 export async function discoverSessions(inputRoot: string): Promise<SessionDiscovery[]> {
   const discoveries: SessionDiscovery[] = [];
 
-  // The session folders sit two levels down (workspace-uuid/space-uuid/local_<id>/).
-  // We walk depth-3 recursively to find every `local_<...>` directory.
   await walkForSessionFolders(inputRoot, 0, 4, async (sessionDir) => {
     const folderName = path.basename(sessionDir);
     if (!folderName.startsWith('local_')) return;
@@ -119,43 +133,74 @@ async function walkForSessionFolders(
 
 /**
  * For a given `local_<id>/` session folder, find all `.jsonl` transcript
- * files anywhere underneath, classify each as parent / subagent /
- * acompact, and pull the slug from the `-sessions-<slug>` parent directory.
- *
- * Audit-log files (`audit.jsonl`) at the session root are excluded — they're
- * runtime logs, not conversation transcripts.
+ * files anywhere underneath, classify each, and pull the slug from the
+ * `-sessions-<slug>` parent directory.
  */
 async function collectTranscripts(sessionDir: string): Promise<TranscriptFile[]> {
   const results: TranscriptFile[] = [];
   await walkAllJsonl(sessionDir, (filePath) => {
-    if (path.basename(filePath) === 'audit.jsonl') return;
-    if (!filePath.includes('/projects/')) return;
-
-    const filename = path.basename(filePath);
-    const isSubagent = filePath.includes('/subagents/');
-    const isAcompact = filename.startsWith('agent-acompact-');
-
-    // The slug is in the parent or grandparent directory:
-    //   .../-sessions-<slug>/<uuid>.jsonl                  → parent
-    //   .../-sessions-<slug>/<uuid>/subagents/agent-*.jsonl → grandparent
-    let slug = '';
-    const parts = filePath.split(path.sep);
-    for (let i = parts.length - 1; i >= 0; i--) {
-      const p = parts[i];
-      if (p !== undefined && p.startsWith('-sessions-')) {
-        slug = p.replace(/^-sessions-/, '');
-        break;
-      }
-    }
-
-    results.push({
-      path: filePath,
-      slug,
-      isSubagent,
-      isAcompact,
-    });
+    const classified = classifyTranscriptPath(filePath);
+    if (!classified) return;
+    results.push(classified);
   });
   return results;
+}
+
+/**
+ * Normalize an absolute file system path to forward-slash form so that
+ * substring matchers are platform-independent. The native-separator path
+ * stays in `filePath` for `fs` calls; only the matching cares about
+ * normalization.
+ */
+export function toPosixPath(filePath: string): string {
+  return filePath.replace(/\\/g, '/');
+}
+
+/**
+ * Decide whether `filePath` is a Cowork transcript and, if so, classify it.
+ * Returns `null` if the path should be ignored (e.g. `audit.jsonl`, or a
+ * `.jsonl` file outside any `projects/` directory).
+ *
+ * Exported so the Windows-path regression can be exercised by a unit test
+ * without spinning up a real filesystem on the wrong platform.
+ */
+export function classifyTranscriptPath(filePath: string): TranscriptFile | null {
+  // Normalize to forward-slash for matching. Both '/' and '\' are treated as
+  // path separators. The original `filePath` is preserved in the result so
+  // downstream fs calls use the native separator.
+  //
+  // We extract the filename from the NORMALIZED path rather than via
+  // path.basename() because path.basename() is itself platform-dependent —
+  // on Linux it does not recognize '\' as a separator, so a Windows-shaped
+  // input would return the whole path. Splitting the normalized form is the
+  // only way to be uniformly correct on both platforms.
+  const norm = toPosixPath(filePath);
+  const filename = norm.split('/').pop() ?? '';
+
+  if (filename === 'audit.jsonl') return null;
+  if (!norm.includes('/projects/')) return null;
+
+  const isSubagent = norm.includes('/subagents/');
+  const isAcompact = filename.startsWith('agent-acompact-');
+
+  // The slug is in the `-sessions-<slug>` parent (or grandparent for subagents).
+  // Split the normalized path on `/` so we get the same segments on any platform.
+  const parts = norm.split('/');
+  let slug = '';
+  for (let i = parts.length - 1; i >= 0; i--) {
+    const seg = parts[i];
+    if (seg !== undefined && seg.startsWith('-sessions-')) {
+      slug = seg.replace(/^-sessions-/, '');
+      break;
+    }
+  }
+
+  return {
+    path: filePath,
+    slug,
+    isSubagent,
+    isAcompact,
+  };
 }
 
 async function walkAllJsonl(
