@@ -22,6 +22,7 @@ This exporter is **the choke point** between Hassan's daily AI-assisted work and
 | Decision | Value |
 |---|---|
 | Location | `tools/nfx-cowork-export/` inside `TSGCFO/nexfortis-content-pipeline` |
+| Why same repo | The exporter lives in the pipeline repo (not a separate repo) because: (a) it shares `lib/redaction` — a safety-critical module enforcing the family-law blocklist — and a separate repo would force either drift-prone inlined duplication or a release-step lag between the two; (b) direct workspace import is the safer posture for safety-critical code; (c) the mixed-dependency risk is managed by package isolation in `tools/nfx-cowork-export/package.json` (no accidental import of `inngest`, `@sanity/client`, etc.) rather than by physical-repo separation. |
 | Language | **TypeScript** (matches pipeline repo, shares `lib/redaction` directly, Vitest already in stack) |
 | Packaging | Try `bun build --compile --target=bun-windows-x64`. If Windows packaging blows up, fall back to `pnpm install -g` from the repo. **Do not** switch languages if packaging is hard. |
 | Distribution | Single binary Hassan runs on his Windows laptop, or `pnpm install -g` fallback |
