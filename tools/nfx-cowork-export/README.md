@@ -108,8 +108,8 @@ The audit covers:
 | 1 | Unhandled error |
 | 2 | Missing config file (one of the three allowlists) |
 | 3 | Invalid config file (JSON parse error or shape mismatch) |
-| 4 | At least one emitted file failed schema validation, or `--validate-output` target failed |
-| 5 | No kept sessions (entire input filtered out — usually an allowlist misconfiguration) |
+| 4 | At least one emitted file failed schema validation (NORMAL mode) |
+| 5 | `--validate-output` reported the target file invalid (or unparseable JSON in the target) |
 
 ## Standalone validation
 
@@ -120,7 +120,7 @@ To check that a previously emitted file still validates against the v1 schema
 nfx-cowork-export --validate-output path/to/some-session.json
 ```
 
-Exits 0 on pass, 4 on fail. Prints sessionId + event count on pass, schema
+Exits 0 on pass, 5 on fail. Prints sessionId + event count on pass, schema
 error path on fail.
 
 ## Read-only
