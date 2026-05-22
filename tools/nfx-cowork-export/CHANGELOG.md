@@ -18,6 +18,14 @@ Each released version has the following subsections (omit any that are empty):
 
 ## [Unreleased]
 
+### Validator (post-slice-1 fix, no schemaVersion bump)
+
+Addresses second-reviewer findings on slice 1. None of these change the shape of emitted JSON — they only change which inputs the validator rejects. `schemaVersion` stays at 1.
+
+- **Strict mode on every object schema.** Previously, zod's default `.object()` silently stripped unknown fields. The validator now uses `.strict()` everywhere (`sessionSchema`, `exporterMetaSchema`, all four event variants including the recursive subagent). Unknown fields are rejected with a clear error path. Rationale: this validator's job is to catch exporter bugs (e.g. a future code change emitting `txt` instead of `text`). Strip mode swallows that silently; strict mode surfaces it immediately. Forward-compatibility for genuinely new fields is handled by `schemaVersion` bumps, not by lax validation.
+- **`continuationGroupId` must be non-empty when present.** Changed from `z.string().optional()` to `nonEmptyString.optional()`. An empty string is a bug (the hash failed to compute), not a "no continuation group" signal — omit the field entirely instead.
+- **Tests added.** Seven new strictness tests + three continuationGroupId edge-case tests, all in `tests/cowork-export/schema.test.ts`.
+
 ### Schema (v1, initial)
 
 - **`schemaVersion`** — `1`. Closed `kind` set for events: `user_text`, `assistant_text`, `tool_call`, `subagent`. Closed `source` value: `claude_cowork`.

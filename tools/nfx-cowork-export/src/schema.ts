@@ -13,6 +13,13 @@
  *
  * Closed `kind` set for v1: "user_text" | "assistant_text" | "tool_call" | "subagent".
  * Adding a new kind requires a schemaVersion bump.
+ *
+ * Strict mode: every object schema below has `.strict()` applied. This means
+ * unknown fields are REJECTED, not silently stripped. Rationale: this
+ * validator's job is to catch exporter bugs (e.g. a typo emitting `txt`
+ * instead of `text`). Strip mode would swallow that bug silently; strict
+ * mode surfaces it. Forward-compatibility for genuinely new fields is
+ * handled by `schemaVersion` bumps, not by lax validation.
  */
 
 import { z } from "zod";
@@ -44,24 +51,30 @@ const eventCommon = {
   gitBranch: z.string().optional(),
 } as const;
 
-const userTextEvent = z.object({
-  ...eventCommon,
-  kind: z.literal("user_text"),
-  text: nonEmptyString,
-});
+const userTextEvent = z
+  .object({
+    ...eventCommon,
+    kind: z.literal("user_text"),
+    text: nonEmptyString,
+  })
+  .strict();
 
-const assistantTextEvent = z.object({
-  ...eventCommon,
-  kind: z.literal("assistant_text"),
-  text: nonEmptyString,
-});
+const assistantTextEvent = z
+  .object({
+    ...eventCommon,
+    kind: z.literal("assistant_text"),
+    text: nonEmptyString,
+  })
+  .strict();
 
-const toolCallEvent = z.object({
-  ...eventCommon,
-  kind: z.literal("tool_call"),
-  tool: nonEmptyString,
-  summary: z.string().max(80).optional(),
-});
+const toolCallEvent = z
+  .object({
+    ...eventCommon,
+    kind: z.literal("tool_call"),
+    tool: nonEmptyString,
+    summary: z.string().max(80).optional(),
+  })
+  .strict();
 
 export type UserTextEvent = z.infer<typeof userTextEvent>;
 export type AssistantTextEvent = z.infer<typeof assistantTextEvent>;
@@ -87,13 +100,15 @@ export type Event = UserTextEvent | AssistantTextEvent | ToolCallEvent | Subagen
 // close over a reference resolved after the discriminated union is built.
 let eventSchemaRef: z.ZodType<Event>;
 
-const subagentEventSchema = z.object({
-  ...eventCommon,
-  kind: z.literal("subagent"),
-  subagentSlug: nonEmptyString,
-  parentToolUseId: nonEmptyString,
-  events: z.array(z.lazy(() => eventSchemaRef)),
-});
+const subagentEventSchema = z
+  .object({
+    ...eventCommon,
+    kind: z.literal("subagent"),
+    subagentSlug: nonEmptyString,
+    parentToolUseId: nonEmptyString,
+    events: z.array(z.lazy(() => eventSchemaRef)),
+  })
+  .strict();
 
 eventSchemaRef = z.discriminatedUnion("kind", [
   userTextEvent,
@@ -106,34 +121,40 @@ export const eventSchema = eventSchemaRef;
 
 // Exporter provenance block
 
-export const exporterMetaSchema = z.object({
-  name: z.literal("nfx-cowork-export"),
-  version: nonEmptyString,
-  sourceFormat: z.literal("cowork-jsonl-v1"),
-  exportedAt: isoUtcMs,
-});
+export const exporterMetaSchema = z
+  .object({
+    name: z.literal("nfx-cowork-export"),
+    version: nonEmptyString,
+    sourceFormat: z.literal("cowork-jsonl-v1"),
+    exportedAt: isoUtcMs,
+  })
+  .strict();
 
 export type ExporterMeta = z.infer<typeof exporterMetaSchema>;
 
 // Top-level session document
 
-export const sessionSchema = z.object({
-  schemaVersion: z.literal(SCHEMA_VERSION),
-  _exporter: exporterMetaSchema,
-  source: z.literal("claude_cowork"),
-  sessionId: nonEmptyString,
-  sessionSlug: z.string().optional(),
-  continuationGroupId: z.string().optional(),
-  workspaceId: z.string().optional(),
-  title: z.string().optional(),
-  createdAt: isoUtcMs,
-  lastActivityAt: isoUtcMs.optional(),
-  model: z.string().optional(),
-  account: z.string().optional(),
-  cwds: z.array(z.string()).optional(),
-  gitBranches: z.array(z.string()).optional(),
-  mcpServers: z.array(z.string()).optional(),
-  events: z.array(eventSchema),
-});
+export const sessionSchema = z
+  .object({
+    schemaVersion: z.literal(SCHEMA_VERSION),
+    _exporter: exporterMetaSchema,
+    source: z.literal("claude_cowork"),
+    sessionId: nonEmptyString,
+    sessionSlug: z.string().optional(),
+    // If present, must be a non-empty hash string. Empty string would be a bug,
+    // not "no continuation group" — omit the field instead.
+    continuationGroupId: nonEmptyString.optional(),
+    workspaceId: z.string().optional(),
+    title: z.string().optional(),
+    createdAt: isoUtcMs,
+    lastActivityAt: isoUtcMs.optional(),
+    model: z.string().optional(),
+    account: z.string().optional(),
+    cwds: z.array(z.string()).optional(),
+    gitBranches: z.array(z.string()).optional(),
+    mcpServers: z.array(z.string()).optional(),
+    events: z.array(eventSchema),
+  })
+  .strict();
 
 export type SessionDocument = z.infer<typeof sessionSchema>;
