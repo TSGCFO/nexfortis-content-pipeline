@@ -32,6 +32,8 @@ export type {
   SessionDropReason,
   ExporterConfig,
   AuditRow,
+  ParsedSession,
+  ParsedTranscript,
 } from "./types.js";
 
 export {
@@ -45,6 +47,8 @@ export {
   discoverSessions,
   classifyTranscriptPath,
   toPosixPath,
+  subagentsDirectoryForParent,
+  transcriptIdFromPath,
 } from "./discovery.js";
 export { filterSession, matchesAnyPrefix } from "./filter-session.js";
 export {
@@ -74,9 +78,24 @@ export {
   MIN_CWD_ALLOWED_RATIO,
 } from "./post-check.js";
 
+// Slice 4 — auto-continuation + subagent stitching
+export {
+  SCAFFOLD_PREFIX,
+  stripContinuationScaffold,
+  computeContinuationGroupId,
+  firstUserText,
+  type ScaffoldStripResult,
+} from "./continuation.js";
+export {
+  AGENT_TOOL_NAME,
+  doStitch,
+  readAgentDispatchMap,
+  stitchSubagents,
+  type SubagentStitchInput,
+} from "./stitch.js";
+
 export {
   runDiscovery,
   type RunDiscoveryOptions,
   type RunDiscoveryResult,
-  type ParsedSession,
 } from "./run-discovery.js";

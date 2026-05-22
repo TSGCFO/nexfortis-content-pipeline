@@ -20,8 +20,8 @@ This tool walks the local Cowork data folder, filters out family-law content, sc
 | Per-event filtering and normalization | ✅ slice 3 |
 | Tool-call summary registry (10 bespoke extractors) | ✅ slice 3 |
 | Post-filter checks (tiny-session + cwd-majority) | ✅ slice 3 |
-| Subagent stitching (recursive, non-acompact only) | ⏳ slice 4 |
-| Auto-continuation scaffold strip + `continuationGroupId` | ⏳ slice 4 |
+| Subagent stitching (recursive, non-acompact only) | ✅ slice 4 |
+| Auto-continuation scaffold strip + `continuationGroupId` | ✅ slice 4 |
 | PII regex pass (shared `@ncp/redaction`) | ⏳ slice 5 |
 | CLI wrapper (`--input`, `--output`, `--dry-run`, etc.) | ⏳ slice 5 |
 | Audit log (stdout + sidecar) | ⏳ slice 5 |

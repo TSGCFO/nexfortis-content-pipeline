@@ -259,3 +259,28 @@ function extractSessionMeta(raw: Record<string, unknown>): SessionMeta {
 
   return meta;
 }
+
+
+/**
+ * Given a parent transcript path of the form `.../-sessions-<slug>/<uuid>.jsonl`,
+ * compute the sibling-folder path `.../-sessions-<slug>/<uuid>/` where Cowork
+ * stores its subagent files. Caller uses this to filter the session's
+ * discovered transcripts down to those belonging to a specific parent.
+ *
+ * Returns null when the parent path doesn't have the expected shape.
+ */
+export function subagentsDirectoryForParent(parentTranscriptPath: string): string | null {
+  const norm = toPosixPath(parentTranscriptPath);
+  if (!norm.endsWith('.jsonl')) return null;
+  return norm.slice(0, -'.jsonl'.length) + '/subagents';
+}
+
+/**
+ * Given a transcript file path, extract the UUID portion of the filename
+ * (e.g. "abc-123.jsonl" → "abc-123"). Used by run-discovery to compute the
+ * emitted JSON's `sessionId` from a parent transcript path.
+ */
+export function transcriptIdFromPath(transcriptPath: string): string {
+  const filename = toPosixPath(transcriptPath).split('/').pop() ?? '';
+  return filename.replace(/\.jsonl$/i, '');
+}

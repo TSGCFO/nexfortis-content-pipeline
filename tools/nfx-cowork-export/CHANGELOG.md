@@ -18,7 +18,48 @@ Each released version has the following subsections (omit any that are empty):
 
 ## [Unreleased]
 
-### Tool (slice 3 — per-event filter + tool-call summary registry + post-check; no schemaVersion bump)
+### Tool (slice 4 — subagent stitching + auto-continuation handling; no schemaVersion bump)
+
+Wires the subagent and continuation rules. Still no JSON written to disk — slice 5 adds that.
+
+- **`src/continuation.ts`.** `stripContinuationScaffold(events)` drops the leading user_text event when its text begins with the canonical scaffold prefix (`"This session is being continued from a previous conversation that ran out of context."`). `computeContinuationGroupId(slug, firstUserMsg)` hashes `sha256("v1|" + slug + "|" + firstUserMsg.trim().slice(0, 200))` per the locked v1 formula. `firstUserText(events)` picks the first `user_text` event's text from a filtered stream.
+- **`src/stitch.ts`.** `doStitch(parentEvents, stitchables, agentDispatchMap)` replaces each `Agent` `tool_call` event with a `subagent` event whose nested `events` array carries the (filtered) subagent's events. `readAgentDispatchMap(parentFile)` builds the `toolu_<id> → input.prompt` lookup table needed for matching. **`AGENT_TOOL_NAME = "Agent"`** is now a constant — empirically confirmed to be the correct Cowork dispatching-tool name across all 9 non-acompact subagent files in the real data (the spec originally said `Task`, which doesn't appear in Hassan's data).
+- **Empty-envelope rule honored.** Per Perplexity's confirmation on slice 3: when a matched subagent's filtered events array is empty, the envelope is still emitted so the parent's `tool_call` for the `Agent` dispatch is replaced cleanly. Dropping the envelope would orphan the dispatch.
+- **`src/types.ts` restructured.** `ParsedSession` now carries `transcripts: ParsedTranscript[]` instead of a flat `events: Event[]`. Each `ParsedTranscript` has its own `transcriptId` (the .jsonl filename's UUID — becomes the emitted document's `sessionId`), its own `events` array post-stitching, and an optional `continuationGroupId`. Multi-transcript sessions are auto-continuation chains; each transcript gets its own emitted JSON in slice 5. Added one-line constraint comment on `ParsedSession.postCheck` per Perplexity slice-3 review note: *Slice 5 emit-loop must filter on `s.postCheck.keep`*.
+- **`src/discovery.ts`** adds two small helpers: `subagentsDirectoryForParent(parent)` and `transcriptIdFromPath(transcript)` so the orchestrator can pair parent transcripts with their subagents and derive emitted `sessionId` from disk paths.
+- **`src/run-discovery.ts`** rewired to: per parent transcript, parse → scaffold-strip → stitch subagents → record on `ParsedTranscript`. Per session, run `postCheckSession` against the union of all transcripts' events.
+- **isSidechain handling:** subagent transcripts have `isSidechain: true` on every event; the existing per-event filter doesn't depend on that flag and processes them correctly. No special handling needed.
+
+### Real-data sanity check (against the full 65-session Cowork backup)
+
+| Metric | Value |
+|---|---|
+| Sessions discovered | 61 |
+| Parsed sessions emitted | 34 |
+| Continuation chains | 2 (`cool-great-franklin` has 4 transcripts; one other has 2) |
+| Transcripts with continuation scaffold stripped | 3 |
+| Total `subagent` events stitched into parent streams | 9 (matches the 9 non-acompact subagent files exactly) |
+
+Sessions that gained subagent events:
+- `beautiful-blissful-volta`: 5 subagent events (the brand-kit creation session)
+- `friendly-vigilant-noether`: 2
+- `beautiful-elegant-fermat`: 1
+- `zen-sweet-bohr`: 1
+
+### Tests added (26 new — workspace total 304 → 330)
+
+- `tests/cowork-export/continuation.test.ts` — 14 tests across scaffold strip + groupId computation + firstUserText
+- `tests/cowork-export/stitch.test.ts` — 12 tests across happy path + no-match + empty-envelope + multi-subagent + `readAgentDispatchMap`
+
+### Schema (unchanged from slice 1.5)
+
+No emitted-JSON shape changes. `schemaVersion` stays at `1`.
+
+---
+
+## [Previously released]
+
+## Tool (slice 3 — per-event filter + tool-call summary registry + post-check; no schemaVersion bump)
 
 Reads each kept session's parent transcripts, applies the per-event filter table from the locked spec, converts raw lines into the v1 `Event[]` shape, and applies two post-filter checks. No JSON is emitted yet — that's slice 5.
 
