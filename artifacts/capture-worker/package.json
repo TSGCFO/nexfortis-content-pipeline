@@ -16,7 +16,15 @@
     "typecheck": "tsc --build"
   },
   "dependencies": {
+    "@microsoft/microsoft-graph-client": "^3.0.7",
+    "@ncp/db": "workspace:*",
+    "@ncp/embeddings": "workspace:*",
     "@ncp/logger": "workspace:*",
-    "inngest": "^3.22.0"
+    "@ncp/redaction": "workspace:*",
+    "inngest": "^3.22.0",
+    "zod": "^3.23.0"
+  },
+  "devDependencies": {
+    "@microsoft/microsoft-graph-types": "^2.40.0"
   }
 }

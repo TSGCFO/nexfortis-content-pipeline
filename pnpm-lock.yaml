@@ -41,12 +41,31 @@ importers:
 
   artifacts/capture-worker:
     dependencies:
+      '@microsoft/microsoft-graph-client':
+        specifier: ^3.0.7
+        version: 3.0.7
+      '@ncp/db':
+        specifier: workspace:*
+        version: link:../../lib/db
+      '@ncp/embeddings':
+        specifier: workspace:*
+        version: link:../../lib/embeddings
       '@ncp/logger':
         specifier: workspace:*
         version: link:../../lib/logger
+      '@ncp/redaction':
+        specifier: workspace:*
+        version: link:../../lib/redaction
       inngest:
         specifier: ^3.22.0
-        version: 3.54.2(@opentelemetry/core@2.7.1(@opentelemetry/api@1.9.1))(typescript@5.9.3)(zod@4.4.3)
+        version: 3.54.2(@opentelemetry/core@2.7.1(@opentelemetry/api@1.9.1))(typescript@5.9.3)(zod@3.25.76)
+      zod:
+        specifier: ^3.23.0
+        version: 3.25.76
+    devDependencies:
+      '@microsoft/microsoft-graph-types':
+        specifier: ^2.40.0
+        version: 2.43.1
 
   artifacts/gate-worker: {}
 
@@ -79,7 +98,7 @@ importers:
         version: link:../logger
       openai:
         specifier: ^4.65.0
-        version: 4.104.0
+        version: 4.104.0(zod@3.25.76)
       tiktoken:
         specifier: ^1.0.17
         version: 1.0.22
@@ -125,6 +144,10 @@ packages:
     resolution: {integrity: sha512-b3ctpQwp+PROvU/cttc4OYl4MzfJUWy6FZg+PMXfzmt/+39iHVF0sDfqay8TQM3JA2EUOyKcFZt75jWriQijsA==}
     engines: {node: '>=6.0.0'}
     hasBin: true
+
+  '@babel/runtime@7.29.2':
+    resolution: {integrity: sha512-JiDShH45zKHWyGe4ZNVRrCjBz8Nh9TMmZG1kh4QTK8hCBTWBi8Da+i7s1fJw7/lYpM4ccepSNfqzZ/QvABBi5g==}
+    engines: {node: '>=6.9.0'}
 
   '@babel/types@7.29.0':
     resolution: {integrity: sha512-LwdZHpScM4Qz8Xw2iKSzS+cfglZzJGvofQICy7W7v4caru4EaAmyUuO6BGrbyQ2mYV11W0U8j5mBhd14dd3B0A==}
@@ -807,6 +830,27 @@ packages:
 
   '@js-sdsl/ordered-map@4.4.2':
     resolution: {integrity: sha512-iUKgm52T8HOE/makSxjqoWhe95ZJA1/G1sYsGev2JDKUSS14KAgg1LHb+Ba+IPow0xflbnSkOsZcO08C7w1gYw==}
+
+  '@microsoft/microsoft-graph-client@3.0.7':
+    resolution: {integrity: sha512-/AazAV/F+HK4LIywF9C+NYHcJo038zEnWkteilcxC1FM/uK/4NVGDKGrxx7nNq1ybspAroRKT4I1FHfxQzxkUw==}
+    engines: {node: '>=12.0.0'}
+    peerDependencies:
+      '@azure/identity': '*'
+      '@azure/msal-browser': '*'
+      buffer: '*'
+      stream-browserify: '*'
+    peerDependenciesMeta:
+      '@azure/identity':
+        optional: true
+      '@azure/msal-browser':
+        optional: true
+      buffer:
+        optional: true
+      stream-browserify:
+        optional: true
+
+  '@microsoft/microsoft-graph-types@2.43.1':
+    resolution: {integrity: sha512-7r3FiJYW2qTWnl+Li8GV5MzJqPiJp27hvY98kH5V/ZMzGuIOkcJqOfIpusoIQrskLDfYk5kFT8AjpeW713qcIg==}
 
   '@opentelemetry/api-logs@0.203.0':
     resolution: {integrity: sha512-9B9RU0H7Ya1Dx/Rkyc4stuBZSGVQF27WigitInx2QQoj6KUpEFYPKoWjdFTunJYxmXmh17HeBvbMa1EhGyPmqQ==}
@@ -3074,8 +3118,8 @@ packages:
     resolution: {integrity: sha512-rVksvsnNCdJ/ohGc6xgPwyN8eheCxsiLM8mxuE/t/mOVqJewPuO1miLpTHQiRgTKCLexL4MeAFVagts7HmNZ2Q==}
     engines: {node: '>=10'}
 
-  zod@4.4.3:
-    resolution: {integrity: sha512-ytENFjIJFl2UwYglde2jchW2Hwm4GJFLDiSXWdTrJQBIN9Fcyp7n4DhxJEiWNAJMV1/BqWfW/kkg71UDcHJyTQ==}
+  zod@3.25.76:
+    resolution: {integrity: sha512-gzUt/qt81nXsFGKIFcC3YnfEAx5NkunCfnDlvuBSSFS02bcXu4Lmea0AFIUwbLWxWPx3d9p8S5QoaujKcNQxcQ==}
 
 snapshots:
 
@@ -3103,6 +3147,8 @@ snapshots:
   '@babel/parser@7.29.3':
     dependencies:
       '@babel/types': 7.29.0
+
+  '@babel/runtime@7.29.2': {}
 
   '@babel/types@7.29.0':
     dependencies:
@@ -3514,6 +3560,13 @@ snapshots:
       '@jridgewell/sourcemap-codec': 1.5.5
 
   '@js-sdsl/ordered-map@4.4.2': {}
+
+  '@microsoft/microsoft-graph-client@3.0.7':
+    dependencies:
+      '@babel/runtime': 7.29.2
+      tslib: 2.8.1
+
+  '@microsoft/microsoft-graph-types@2.43.1': {}
 
   '@opentelemetry/api-logs@0.203.0':
     dependencies:
@@ -5463,7 +5516,7 @@ snapshots:
 
   inherits@2.0.4: {}
 
-  inngest@3.54.2(@opentelemetry/core@2.7.1(@opentelemetry/api@1.9.1))(typescript@5.9.3)(zod@4.4.3):
+  inngest@3.54.2(@opentelemetry/core@2.7.1(@opentelemetry/api@1.9.1))(typescript@5.9.3)(zod@3.25.76):
     dependencies:
       '@bufbuild/protobuf': 2.12.0
       '@inngest/ai': 0.1.7
@@ -5490,7 +5543,7 @@ snapshots:
       strip-ansi: 5.2.0
       temporal-polyfill: 0.2.5
       ulid: 2.4.0
-      zod: 4.4.3
+      zod: 3.25.76
     optionalDependencies:
       typescript: 5.9.3
     transitivePeerDependencies:
@@ -5638,7 +5691,7 @@ snapshots:
 
   on-exit-leak-free@2.1.2: {}
 
-  openai@4.104.0:
+  openai@4.104.0(zod@3.25.76):
     dependencies:
       '@types/node': 18.19.130
       '@types/node-fetch': 2.6.13
@@ -5647,6 +5700,8 @@ snapshots:
       form-data-encoder: 1.7.2
       formdata-node: 4.4.1
       node-fetch: 2.7.0
+    optionalDependencies:
+      zod: 3.25.76
     transitivePeerDependencies:
       - encoding
 
@@ -6094,4 +6149,4 @@ snapshots:
 
   yocto-queue@0.1.0: {}
 
-  zod@4.4.3: {}
+  zod@3.25.76: {}
