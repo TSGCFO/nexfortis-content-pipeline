@@ -14,8 +14,9 @@ This tool walks the local Cowork data folder, filters out family-law content, sc
 |---|---|
 | Output schema (`src/schema.ts`) | ✅ v1 locked |
 | Schema validator (`src/validator.ts`) | ✅ shipped |
-| File discovery / walker | ⏳ slice 2 |
-| Session metadata pre-filter (slug blocklist, account allowlist, cwd pre-check) | ⏳ slice 2 |
+| File discovery / walker | ✅ slice 2 |
+| Session metadata pre-filter (slug blocklist, account allowlist, cwd pre-check) | ✅ slice 2 |
+| `--dry-run` audit report (stdout) | ✅ slice 2 |
 | Per-event filtering and normalization | ⏳ slice 3 |
 | Tool-call summary registry (10 bespoke extractors) | ⏳ slice 3 |
 | Subagent stitching (recursive, non-acompact only) | ⏳ slice 4 |

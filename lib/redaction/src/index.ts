@@ -13,6 +13,14 @@ export type {
   BlocklistResult,
   CheckBlocklistOptions,
 } from './blocklist.js';
+export {
+  checkSlugBlocklist,
+  hashSlug,
+} from './slug-blocklist.js';
+export type {
+  SlugBlocklistResult,
+  CheckSlugBlocklistOptions,
+} from './slug-blocklist.js';
 export type {
   BlockReason,
   PiiStatus,
