@@ -11,7 +11,6 @@ const CONFIG_DEFAULT: ExporterConfig = {
     alwaysDeny: ['C:\\Users\\HassanSadiq\\AppData\\Roaming\\Claude\\'],
   },
   familyLawSlugs: [],
-  accountAllowlist: [],
 };
 
 const TEXT_500 = 'x'.repeat(500);

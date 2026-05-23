@@ -77,29 +77,21 @@ export function filterSession(
     return { keep: false, reason: 'system_path_cwd' };
   }
 
-  // We need meta to do the next two filters. If meta is missing, drop —
-  // we cannot reason about account or cwd without it, and proceeding without
-  // would violate the fail-closed posture.
+  // We need meta to do the cwd pre-check. If meta is missing, drop —
+  // we cannot reason about cwd without it, and proceeding without would
+  // violate the fail-closed posture.
   if (!meta) {
     return { keep: false, reason: 'meta_missing' };
   }
 
-  // 5. Account allowlist — case-insensitive exact match.
-  if (config.accountAllowlist.length > 0) {
-    const account = meta.emailAddress?.toLowerCase() ?? '';
-    const allowed = config.accountAllowlist.some(
-      (a) => a.toLowerCase() === account
-    );
-    if (!allowed) {
-      return {
-        keep: false,
-        reason: 'account_not_allowlisted',
-        detail: account || '<no-emailAddress-in-meta>',
-      };
-    }
-  }
+  // (Removed: account-allowlist filter. Every Cowork session folder on
+  // the user's laptop is theirs by definition — the user owns the disk.
+  // Old behavior dropped sessions whose meta.emailAddress wasn't in an
+  // allowlist, which caused legitimate sessions under a now-defunct
+  // account to be excluded. meta.emailAddress is still preserved in the
+  // emitted JSON's `account` field for the ingester to use as metadata.)
 
-  // 6. cwd pre-check — based on the initial cwd from meta.
+  // 5. cwd pre-check — based on the initial cwd from meta.
   //
   // Three-bucket model:
   //   - alwaysDeny:  if cwd starts with any of these, drop (overrides everything)

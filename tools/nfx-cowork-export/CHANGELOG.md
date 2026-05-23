@@ -18,6 +18,50 @@ Each released version has the following subsections (omit any that are empty):
 
 ## [Unreleased]
 
+### Tool (post-slice-6 fix: remove account-allowlist filter; no schemaVersion bump)
+
+The `account-allowlist.json` config file and the `--account-allowlist` flag are removed. The session-level filter no longer drops sessions based on `meta.emailAddress`.
+
+**Why.** Hassan caught this during his first production end-to-end run on 2026-05-23: 18 sessions were dropped as `account_not_allowlisted` even though they were legitimate work sessions. The cause was a design assumption that doesn't hold: when you change your Cowork account (e.g. switching from an old work email to a new personal email), Cowork retains the OLD sessions on disk under their original account label. Those sessions are still yours — the disk is yours — and the exporter has no business filtering them out. Every session under the user's `local-agent-mode-sessions` folder belongs to that user by definition.
+
+**What changes.**
+
+- Removed: `tools/nfx-cowork-export/account-allowlist.example.json`
+- Removed: `package.json` files list no longer includes `account-allowlist.example.json`
+- Removed: `--account-allowlist <path>` CLI flag
+- Removed: `accountAllowlist` field on the `CliDefaults` interface
+- Removed: `accountAllowlistPath` option on `loadExporterConfig` (signature: now takes only `cwdAllowlistPath` + `familyLawSlugsPath`)
+- Removed: `accountAllowlist` field on the `ExporterConfig` interface
+- Removed: `account_not_allowlisted` member from the `SessionDropReason` union
+- Removed: the account-check block (~13 lines) in `filter-session.ts`
+- Removed: `account_not_allowlisted` from the audit's `ALL_DROP_REASONS` list
+
+**What does NOT change.**
+
+- The `account` field in the emitted JSON schema (`SessionDocument.account: string | undefined`) stays. It's metadata, populated from `meta.emailAddress` in `buildSessionDocument`, surfaced for the ingester to use however it wants. The schema is unchanged; `schemaVersion` stays at `1`.
+- The `cwd-allowlist` and `family-law-slugs` filters are unchanged. Those are content-policy concerns (which directories are NexFortis project folders; which session slugs are family-law-related), not identity concerns.
+- Existing emitted JSONs from prior runs are still valid against the v1 schema.
+
+**Tests.**
+
+- `tests/cowork-export/filter-session.test.ts` — removed the `drops when account is not on the allowlist`, `allows when account allowlist is empty`, and `scheduled_task wins over account_not_allowlisted` tests. Added a new describe block (`filterSession — account is no longer a filter`) with 4 cases asserting: sessions under the current email pass through, sessions under an old/defunct email pass through (this was the bug), sessions with no `emailAddress` in meta pass through, and no `FilterDecision` ever returns `reason: 'account_not_allowlisted'`.
+- `tests/cowork-export/config.test.ts` — rewrote to drop all account-allowlist coverage. New tests for the two-file loader signature plus a regression assert that the returned `ExporterConfig` does not have an `accountAllowlist` field.
+- `tests/cowork-export/cli-defaults.test.ts` — removed `accountAllowlist` assertions.
+- `tests/cowork-export/post-check.test.ts` — removed `accountAllowlist` from the `EMPTY_CONFIG` fixture.
+- Test count: 360 → 376 net after this change (was 379 before this change branched off integration; the audit-fix branch added 4 tests that are in PR #21 separately).
+
+**Real-data smoke-test.** Against Hassan's full backup with the same `cwd-allowlist` he used before:
+
+| Metric | Run with old account-allowlist | Run without (this change) |
+|---|---|---|
+| Sessions discovered | 69 | 69 |
+| Kept (passed filters) | 14 | (will be higher — exact count depends on what's left after cwd + post-check) |
+| Validation failures | 0 | 0 (expected) |
+
+**Migration.** Existing installs that have `%APPDATA%\nfx-cowork-export\account-allowlist.json` lying around: the file is now ignored. Safe to delete; harmless if left in place. The install kit's `install.ps1` no longer creates it for new installs.
+
+---
+
 ### Tool (slice 6 — review cleanups + single-binary packaging via `bun build --compile`; no schemaVersion bump)
 
 This is the final slice. After it lands, the `feature/cowork-exporter` integration branch PRs into `main` as one combined review.

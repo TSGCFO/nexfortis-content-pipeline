@@ -44,7 +44,6 @@ pnpm --filter @ncp/cowork-export build
 # 1. Create your allowlist files (one-time).
 mkdir $env:APPDATA\nfx-cowork-export
 cp cwd-allowlist.example.json    $env:APPDATA\nfx-cowork-export\cwd-allowlist.json
-cp account-allowlist.example.json $env:APPDATA\nfx-cowork-export\account-allowlist.json
 cp family-law-slugs.example.json  $env:APPDATA\nfx-cowork-export\family-law-slugs.json
 # Then edit each file to fit your environment.
 
@@ -57,13 +56,14 @@ nfx-cowork-export
 
 ## Configuration
 
-Three configuration files live outside the repo so personal data never lands in version control:
+Two configuration files live outside the repo so personal data never lands in version control:
 
 | File | Purpose | Default location |
 |---|---|---|
 | `cwd-allowlist.json` | Allow / deny lists for which working directories' sessions to ingest | `%APPDATA%\nfx-cowork-export\cwd-allowlist.json` on Windows; `~/.config/nfx-cowork-export/cwd-allowlist.json` on Linux/macOS |
 | `family-law-slugs.json` | List of session slugs whose content must be excluded | same dir |
-| `account-allowlist.json` | List of Cowork account emails to ingest from | same dir |
+
+> Earlier versions of this tool also had a third config file, `account-allowlist.json`, which dropped sessions whose `meta.emailAddress` wasn't in the list. That filter was removed: every session on the user's own laptop is theirs by definition (the disk is theirs). If you switched Cowork accounts, sessions under your old account are still your work and should not be excluded by an identity check. See CHANGELOG entry "remove account-allowlist filter" for the full reasoning.
 
 The example files in this directory document the shape of each. The exporter ships **fail-closed** — if `cwd-allowlist.json` does not exist, the tool refuses to run and prints the example path.
 
@@ -77,8 +77,6 @@ nfx-cowork-export
                                        %APPDATA%\nfx-cowork-export\cwd-allowlist.json on Windows]
   --family-law-blocklist <path>       [default: ~/.config/nfx-cowork-export/family-law-slugs.json on Linux/macOS;
                                        %APPDATA%\nfx-cowork-export\family-law-slugs.json on Windows]
-  --account-allowlist <path>          [default: ~/.config/nfx-cowork-export/account-allowlist.json on Linux/macOS;
-                                       %APPDATA%\nfx-cowork-export\account-allowlist.json on Windows]
   --dry-run                           [parse, filter, validate, write nothing]
   --verbose                           [per-session decisions to stdout]
   --validate-output <path>            [validate an existing emitted JSON file against the schema; standalone mode]

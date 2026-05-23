@@ -13,7 +13,6 @@ import type {
 const EMPTY_CONFIG: ExporterConfig = {
   cwdAllowlist: { alwaysAllow: [], allowPrefixes: [], alwaysDeny: [] },
   familyLawSlugs: [],
-  accountAllowlist: [],
 };
 
 function makeDiscovery(opts: {
@@ -134,22 +133,11 @@ describe('filterSession — drop reasons', () => {
     }
   });
 
-  it('drops when account is not on the allowlist', () => {
-    const decision = filterSession(
-      makeDiscovery({ meta: { initialMessage: 'hi', emailAddress: 'rando@example.com' } }),
-      { ...EMPTY_CONFIG, accountAllowlist: ['hassan@example.test'] }
-    );
-    expect(decision.keep).toBe(false);
-    if (!decision.keep) expect(decision.reason).toBe('account_not_allowlisted');
-  });
-
-  it('allows when account allowlist is empty (no filtering applied)', () => {
-    const decision = filterSession(
-      makeDiscovery({ meta: { initialMessage: 'hi', emailAddress: 'anyone@example.com' } }),
-      { ...EMPTY_CONFIG, accountAllowlist: [] }
-    );
-    expect(decision.keep).toBe(true);
-  });
+  // (Removed: tests that previously asserted account_not_allowlisted drops
+  // and empty-allowlist passes. The account filter was removed entirely —
+  // every session on the user's own laptop is theirs by definition. See
+  // the new "no longer filters by account" describe block at the bottom
+  // of this file for the regression check.)
 
   it('drops when cwd matches an alwaysDeny prefix', () => {
     const decision = filterSession(
@@ -243,19 +231,8 @@ describe('filterSession — precedence', () => {
     if (!decision.keep) expect(decision.reason).toBe('family_law_slug');
   });
 
-  it('scheduled_task wins over account_not_allowlisted', () => {
-    const decision = filterSession(
-      makeDiscovery({
-        meta: {
-          initialMessage: '<scheduled-task name="x" />',
-          emailAddress: 'rando@example.com',
-        },
-      }),
-      { ...EMPTY_CONFIG, accountAllowlist: ['hassan@example.test'] }
-    );
-    expect(decision.keep).toBe(false);
-    if (!decision.keep) expect(decision.reason).toBe('scheduled_task');
-  });
+  // (Removed: "scheduled_task wins over account_not_allowlisted" — the
+  // account filter no longer exists, so this priority test is moot.)
 });
 
 describe('matchesAnyPrefix — path normalization', () => {
@@ -284,5 +261,73 @@ describe('matchesAnyPrefix — path normalization', () => {
 
   it('returns false when prefixes array is empty', () => {
     expect(matchesAnyPrefix('/anything', [])).toBe(false);
+  });
+});
+
+describe('filterSession — account is no longer a filter (account-filter removal)', () => {
+  // After the account-allowlist removal, every session on the user's laptop
+  // is theirs by definition. These tests lock the new behavior: the filter
+  // pipeline must NEVER drop a session based on meta.emailAddress.
+
+  function passingDiscovery(emailAddress: string): SessionDiscovery {
+    return makeDiscovery({
+      meta: {
+        initialMessage: 'a normal first message',
+        emailAddress,
+        cwd: '/sessions/x/mnt/projects/work',  // sandbox path; alwaysAllow covers /sessions/
+      },
+    });
+  }
+
+  it('sessions under the current email pass through', () => {
+    const decision = filterSession(
+      passingDiscovery('hassansadiq73@gmail.com'),
+      { ...EMPTY_CONFIG, cwdAllowlist: { alwaysAllow: ['/sessions/'], allowPrefixes: [], alwaysDeny: [] } }
+    );
+    expect(decision.keep).toBe(true);
+  });
+
+  it('sessions under an old / defunct email pass through (this was the bug)', () => {
+    // Hassan switched email accounts; the old account's sessions are still
+    // his and should NOT be dropped by anything account-related.
+    const decision = filterSession(
+      passingDiscovery('old-work-email@some-defunct-domain.test'),
+      { ...EMPTY_CONFIG, cwdAllowlist: { alwaysAllow: ['/sessions/'], allowPrefixes: [], alwaysDeny: [] } }
+    );
+    expect(decision.keep).toBe(true);
+  });
+
+  it('sessions with NO emailAddress in meta still pass through', () => {
+    const decision = filterSession(
+      makeDiscovery({
+        meta: {
+          initialMessage: 'a normal first message',
+          // emailAddress intentionally absent
+          cwd: '/sessions/x/mnt/projects/work',
+        } as unknown as SessionMeta,
+      }),
+      { ...EMPTY_CONFIG, cwdAllowlist: { alwaysAllow: ['/sessions/'], allowPrefixes: [], alwaysDeny: [] } }
+    );
+    expect(decision.keep).toBe(true);
+  });
+
+  it('no FilterDecision in the keep:false union has reason "account_not_allowlisted"', () => {
+    // Drive every drop path and assert that none of them returned the removed reason.
+    // This is a paranoid check that the removal is total: even if some future
+    // code path tried to return account_not_allowlisted, TypeScript would reject
+    // it (the union member is gone from types.ts), but assert at runtime too.
+    const samples: SessionDiscovery[] = [
+      // Will drop for family_law_slug
+      makeDiscovery({ slug: 'synthetic-blocked-slug', meta: { initialMessage: 'hi', emailAddress: 'x@y.test', cwd: '/ok' } }),
+      // Will drop for scheduled_task
+      makeDiscovery({ meta: { initialMessage: '<scheduled-task name="x" />', emailAddress: 'x@y.test', cwd: '/ok' } }),
+    ];
+    const cfg = { ...EMPTY_CONFIG, familyLawSlugs: ['synthetic-blocked-slug'] };
+    for (const s of samples) {
+      const d = filterSession(s, cfg);
+      if (!d.keep) {
+        expect(d.reason).not.toBe('account_not_allowlisted');
+      }
+    }
   });
 });
