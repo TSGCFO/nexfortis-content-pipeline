@@ -45,6 +45,13 @@ describe('userConfigDir env parameterization', () => {
   // env propagation directly; on non-Windows hosts userConfigDir ignores env
   // (uses ~/.config/...), so we instead assert the function is callable with
   // an arbitrary env and produces a stable path.
+  //
+  // TODO(#20): the Windows-only assertions below early-return on the Linux
+  // CI host, so PR CI never actually exercises the Windows code paths. Fix
+  // by parameterizing detectPlatform() the same way userConfigDir(env) was
+  // parameterized in slice 6 prep — pass platform as a default-valued
+  // parameter and have these tests supply 'win32' explicitly. See
+  // https://github.com/TSGCFO/nexfortis-content-pipeline/issues/20.
   it('accepts an env parameter without erroring (signature regression guard)', () => {
     expect(() => userConfigDir({})).not.toThrow();
     expect(() => userConfigDir({ APPDATA: '/some/fake/path' })).not.toThrow();
