@@ -84,9 +84,10 @@ export async function runDiscovery(
     }
 
     // Chain groupId assignment — see assignContinuationGroupIds in
-    // continuation.ts for the full rule. Briefly: continuations share ONE
-    // groupId derived from the original's first user message; the original
-    // itself has no groupId.
+    // continuation.ts for the full rule. Briefly: every transcript in a
+    // multi-transcript chain (original included) gets the SAME groupId,
+    // derived from the original's first user message. Standalone sessions
+    // get no groupId.
     if (slug) {
       assignContinuationGroupIds(transcripts, slug);
     }

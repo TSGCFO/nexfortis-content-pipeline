@@ -208,7 +208,12 @@ describe('assignContinuationGroupIds — chain-level rule (Bug 2 regression)', (
     };
   }
 
-  it('three continuations of one original all share the same groupId', () => {
+  it('all transcripts in a chain (original included) share the same groupId', () => {
+    // Per the locked spec in brief.md: every transcript in a chain gets the
+    // SAME continuationGroupId, derived from the original's first user
+    // message. The ingester groups chains by GROUP BY continuationGroupId
+    // in a single operation — possible only when all chain members share
+    // the field. Absence of the field unambiguously means "standalone".
     const slug = 'cool-great-franklin';
     const original = mkT({ firstMsg: 'I need pricing for NexFortis', scaffoldStripped: false });
     const cont1 = mkT({ firstMsg: 'done', scaffoldStripped: true });
@@ -218,18 +223,14 @@ describe('assignContinuationGroupIds — chain-level rule (Bug 2 regression)', (
 
     assignContinuationGroupIds(transcripts, slug);
 
-    // Original has no groupId (it's not a continuation)
-    expect(original.continuationGroupId).toBeUndefined();
-
-    // All 3 continuations share the SAME groupId
-    expect(cont1.continuationGroupId).toBeDefined();
-    expect(cont2.continuationGroupId).toBe(cont1.continuationGroupId);
-    expect(cont3.continuationGroupId).toBe(cont1.continuationGroupId);
-
-    // And that shared id is the hash of the ORIGINAL's first user message
-    // (NOT the continuation's own first message — that was the bug).
+    // Expected: hash of (slug + ORIGINAL's first user message).
     const expected = computeContinuationGroupId(slug, 'I need pricing for NexFortis');
+
+    // ALL four transcripts share that hash — original included.
+    expect(original.continuationGroupId).toBe(expected);
     expect(cont1.continuationGroupId).toBe(expected);
+    expect(cont2.continuationGroupId).toBe(expected);
+    expect(cont3.continuationGroupId).toBe(expected);
   });
 
   it('original-only chain (no continuations) leaves the original unchanged', () => {
@@ -269,18 +270,19 @@ describe('assignContinuationGroupIds — chain-level rule (Bug 2 regression)', (
     expect(cont.continuationGroupId).toBeUndefined();
   });
 
-  it('does not touch transcripts already carrying a groupId from elsewhere', () => {
-    // (Defensive: if a caller pre-set the field on the original, we should NOT
-    // overwrite it... but we also shouldn't touch the original at all. So
-    // pre-set values are preserved.)
+  it('overwrites any pre-set continuationGroupId on every transcript in the chain', () => {
+    // Per the revised spec, every transcript in the chain gets the same hash.
+    // If a caller pre-set the field, it gets overwritten with the canonical
+    // chain hash. This is intentional: the helper enforces the chain
+    // invariant ("all members share one hash") regardless of prior state.
     const slug = 's';
     const original = { ...mkT({ firstMsg: 'a', scaffoldStripped: false }), continuationGroupId: 'sha256:preset' };
     const cont = mkT({ firstMsg: 'b', scaffoldStripped: true });
     assignContinuationGroupIds([original, cont], slug);
-    // Original keeps its preset value (unusual but not wrong; function avoids overwriting non-continuations)
-    expect(original.continuationGroupId).toBe('sha256:preset');
-    // Continuation gets the new hash
-    expect(cont.continuationGroupId).toBeDefined();
-    expect(cont.continuationGroupId).not.toBe('sha256:preset');
+    const expected = computeContinuationGroupId(slug, 'a');
+    // Pre-set value is replaced with the canonical hash
+    expect(original.continuationGroupId).toBe(expected);
+    expect(cont.continuationGroupId).toBe(expected);
+    expect(original.continuationGroupId).not.toBe('sha256:preset');
   });
 });

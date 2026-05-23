@@ -121,26 +121,24 @@ export interface ParsedTranscript {
   /** Events after per-event filtering, subagent stitching, and scaffold strip. */
   events: Event[];
   /**
-   * Stable per-chain hash, set only on transcripts that are CONTINUATIONS of
-   * an earlier transcript in the same chain.
+   * Stable per-chain hash, set on every transcript in a multi-transcript
+   * auto-continuation chain — ORIGINAL INCLUDED.
    *
    * Computed as
    *   sha256("v1|" + sessionSlug + "|" + originalFirstUserMessage.trim().slice(0, 200))
-   * where `originalFirstUserMessage` is the first user_text of the ORIGINAL
+   * where `originalFirstUserMessage` is the first user_text of the original
    * transcript in the chain (the one whose `scaffoldStripped === false`).
-   *
-   * All continuations in a chain share the SAME `continuationGroupId`. The
-   * original transcript does NOT carry this field — the presence of the field
-   * is the "I am a continuation of something" signal, and the original is by
-   * definition not a continuation of anything.
+   * That same hash is then assigned to every transcript in the chain, so the
+   * ingester can group them via a single GROUP BY continuationGroupId.
    *
    * Standalone transcripts (sessions with only one parent .jsonl in the slug
-   * folder) also do not carry this field. Absence has two meanings, both
-   * benign: "this is the original of a chain" OR "this is a standalone".
+   * folder) do NOT carry this field. Absence unambiguously means "this is a
+   * standalone session, not part of any chain."
    *
-   * Semantics changed after Hassan's production runs 1-3 surfaced 3-of-4
-   * hash collisions within a single chain. See CHANGELOG entry "data-contract
-   * fixes" for the rationale.
+   * Spec lives in `docs/ways-of-work/plan/content-pipeline-v2/cowork-exporter/brief.md`.
+   * Behavior was revised after Hassan's production runs 1-3 surfaced 3-of-4
+   * hash collisions within a single chain. See CHANGELOG entry
+   * "data-contract fixes" for the rationale.
    */
   continuationGroupId?: string;
   /** True if a scaffold message ("This session is being continued from...") was found and stripped from the start of the transcript. */

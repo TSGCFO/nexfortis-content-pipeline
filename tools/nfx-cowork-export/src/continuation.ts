@@ -12,16 +12,15 @@
  *    first user_text event when it begins with the canonical prefix.
  *
  * 2. Sessions whose `-sessions-<slug>/` directory contains more than one
- *    parent transcript are continuation chains. The CONTINUATIONS (transcripts
- *    whose first event was a scaffold message that got stripped) all share a
- *    single `continuationGroupId` — a stable hash over the slug + first user
- *    message of the ORIGINAL transcript in the chain (the one without a
- *    scaffold). The ORIGINAL transcript itself does NOT get a
- *    `continuationGroupId`.
+ *    parent transcript are continuation chains. EVERY transcript in the
+ *    chain — original included — gets the SAME `continuationGroupId`: a
+ *    stable hash over the slug + first user message of the ORIGINAL
+ *    transcript (the one without a scaffold). The ingester groups chains
+ *    by this single field.
  *
  * 3. Standalone sessions (one parent transcript in the slug folder) do NOT
- *    get a `continuationGroupId`. Same for chain originals. The presence of
- *    the field is itself the "I am a continuation of something" signal.
+ *    get a `continuationGroupId`. Absence of the field unambiguously means
+ *    "this is a standalone session, not part of any chain".
  */
 
 import { createHash } from 'node:crypto';
@@ -66,16 +65,16 @@ export function stripContinuationScaffold(events: readonly Event[]): ScaffoldStr
  *
  * `originalFirstUserMessage` is the first user_text of the ORIGINAL transcript
  * in the chain (the one whose `scaffoldStripped === false`). The same value
- * is then assigned to every CONTINUATION transcript in the chain. The
- * original itself does NOT receive this field.
+ * is then assigned to EVERY transcript in the chain, original included —
+ * see `assignContinuationGroupIds` for the assignment logic.
  *
  * The "v1|" prefix is intentional so a future formula change doesn't collide
  * with v1 hashes. The 200-char slice keeps the hash stable even when the
  * first user message is long.
  *
  * This function is pure — it just hashes inputs. The orchestrator
- * (run-discovery.ts) is responsible for identifying the original, picking its
- * first user message, and propagating the result to the continuations.
+ * (run-discovery.ts) is responsible for identifying the original, picking
+ * its first user message, and propagating the result to every transcript.
  */
 export function computeContinuationGroupId(
   slug: string,
@@ -102,17 +101,33 @@ export function firstUserText(events: readonly Event[]): string {
 /**
  * Apply the chain-groupId rule to a list of transcripts (mutates in place).
  *
+ * Per the locked spec in brief.md: every transcript in an auto-continuation
+ * chain gets a `continuationGroupId` — INCLUDING the original. The shared
+ * value is a stable hash of (slug + first-real-user-message-of-the-original).
+ *
  * Rule:
- *   - If transcripts.length < 2, do nothing (standalone session).
+ *   - If transcripts.length < 2, do nothing (standalone session, no chain).
  *   - Otherwise find the ORIGINAL (the unique transcript whose
  *     scaffoldStripped === false) and compute a shared hash from its first
  *     user message.
- *   - Assign that shared hash to every CONTINUATION (scaffoldStripped === true).
- *   - The original itself is NOT assigned; if no original is found (degenerate
- *     case where all transcripts were stripped), nothing is assigned at all.
+ *   - Assign that shared hash to EVERY transcript in the array, including
+ *     the original.
+ *   - If no original is found (degenerate case — all transcripts had a
+ *     scaffold), nothing is assigned at all. Better to lose the metadata
+ *     than to hash a continuation's scaffold-stripped first message as if
+ *     it were the original's.
  *
- * This was extracted from `run-discovery.ts` so it can be unit-tested without
- * setting up disk fixtures. The orchestrator just calls this once per session.
+ * Why every transcript (including the original) shares the field: the
+ * ingester groups chains by `continuationGroupId` in a single operation.
+ * If the original carried no groupId, the ingester would have to do
+ * two-pass logic (find continuations by groupId, then find the original by
+ * slug match with absent groupId) — fragile and ambiguous (absent groupId
+ * could mean "original" OR "standalone"). With every chain member sharing
+ * the field, absence is unambiguous: "this is a standalone session".
+ *
+ * Extracted from `run-discovery.ts` so it can be unit-tested without
+ * setting up disk fixtures. The orchestrator just calls this once per
+ * session.
  */
 export function assignContinuationGroupIds(
   transcripts: ReadonlyArray<{
@@ -128,10 +143,9 @@ export function assignContinuationGroupIds(
   const head = firstUserText(original.events);
   if (head.length === 0) return;
   const sharedGroupId = computeContinuationGroupId(slug, head);
+  // Assign to every transcript in the chain, original included.
   for (const t of transcripts) {
-    if (t.scaffoldStripped) {
-      (t as { continuationGroupId?: string }).continuationGroupId = sharedGroupId;
-    }
+    (t as { continuationGroupId?: string }).continuationGroupId = sharedGroupId;
   }
 }
 
