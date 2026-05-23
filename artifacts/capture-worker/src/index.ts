@@ -1,6 +1,7 @@
 import { Inngest } from 'inngest';
 import { createLogger } from '@ncp/logger';
 
+import { createIngestClaudeCoworkCron } from './jobs/ingest-claude-cowork/index.js';
 import { createIngestMsgraphEmailCron } from './jobs/ingest-msgraph-email/index.js';
 
 const logger = createLogger({ source: 'capture-worker' });
@@ -24,5 +25,10 @@ export const helloWorld = inngest.createFunction(
 );
 
 export const ingestMsgraphEmailCron = createIngestMsgraphEmailCron(inngest);
+export const ingestClaudeCoworkCron = createIngestClaudeCoworkCron(inngest);
 
-export const inngestFunctions = [helloWorld, ingestMsgraphEmailCron];
+export const inngestFunctions = [
+  helloWorld,
+  ingestMsgraphEmailCron,
+  ingestClaudeCoworkCron,
+];
