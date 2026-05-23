@@ -225,8 +225,9 @@ export function createIngestClaudeCoworkCron(
 
       try {
         for (const file of files) {
-          const result = await step.run(stepIdForFile(file.path), () =>
-            processOneFile(file, db, env, logger),
+          const result: FileOutcome = await step.run(
+            stepIdForFile(file.path),
+            () => processOneFile(file, db, env, logger),
           );
 
           summary.filesProcessed += 1;
@@ -264,6 +265,15 @@ export function createIngestClaudeCoworkCron(
             case 'unexpected':
               summary.errors += 1;
               break;
+            default: {
+              // Exhaustiveness guard. If a new variant is added to
+              // `FileOutcome` without a matching case above, this line fails
+              // the build because `result` is no longer `never` here.
+              const _exhaustive: never = result;
+              throw new Error(
+                `Unhandled FileOutcome: ${JSON.stringify(_exhaustive)}`,
+              );
+            }
           }
 
           if (file.mtime.getTime() > maxMtimeMs) {
@@ -311,16 +321,17 @@ export function createIngestClaudeCoworkCron(
  * EXHAUSTIVENESS CONTRACT — when adding a new error class to `./errors.ts`:
  *   1. Add a new variant here on `FileOutcome` (and to
  *      `ClassifiedFileOutcome` below if it's a known-error class).
- *   2. Add a matching branch inside `classifyFileError` (compile error if
- *      `ClassifiedFileOutcome` grows but the helper doesn't return the new
- *      `kind`).
+ *   2. Add a matching branch inside `classifyFileError` so the helper
+ *      actually produces the new `kind`.
  *   3. Add a matching `case` to the switch on `result.kind` inside
  *      `createIngestClaudeCoworkCron`'s per-file loop so the new outcome
  *      gets its own `RunSummary` counter.
  *
- * Skipping any of (2) or (3) silently routes the new error to the
- * `unexpected` catch-all and the run summary's `errors` counter absorbs it
- * without distinct accounting.
+ * Step 3 is enforced at compile time: the switch has a `default` branch
+ * with a `const _exhaustive: never = result;` assertion, so adding a new
+ * variant to `FileOutcome` without adding a matching `case` fails the
+ * build. Step 2 is documentation-only — skipping it routes the new error
+ * to the `unexpected` catch-all without distinct accounting.
  */
 type FileOutcome =
   | { kind: 'session'; result: Awaited<ReturnType<typeof processSession>> }
