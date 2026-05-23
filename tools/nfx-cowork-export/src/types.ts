@@ -33,10 +33,28 @@ export interface SessionMeta {
   emailAddress?: string;
   accountName?: string;
   cwd?: string;
+  /**
+   * ISO 8601 UTC ms timestamp. Cowork's raw meta JSON stores createdAt as a
+   * **number** (epoch ms). The discovery layer converts it to ISO so callers
+   * downstream don't need to think about format. Absent if not in source meta.
+   */
   createdAt?: string;
+  /**
+   * ISO 8601 UTC ms timestamp of the last activity on the session. Same
+   * format-normalization as createdAt — Cowork stores it as epoch ms, we
+   * convert. Absent if not in source meta.
+   */
   lastActivityAt?: string;
   initialMessage?: string;
   model?: string;
+  /**
+   * Names of the remote MCP servers that were configured for this session.
+   * Cowork's raw meta JSON has these under `remoteMcpServersConfig` as an
+   * array of { uuid, name, tools: [...] } objects; the discovery layer
+   * extracts just the `name` field from each. Absent if the source meta
+   * has no `remoteMcpServersConfig` entry or it was empty.
+   */
+  mcpServers?: readonly string[];
 }
 
 export interface TranscriptFile {
@@ -103,16 +121,24 @@ export interface ParsedTranscript {
   /** Events after per-event filtering, subagent stitching, and scaffold strip. */
   events: Event[];
   /**
-   * Stable per-transcript hash, set when this transcript is part of a
-   * continuation chain (i.e. its `-sessions-<slug>/` directory contains more
-   * than one parent .jsonl). Computed as
-   *   sha256("v1|" + sessionSlug + "|" + firstUserMessageAfterScaffoldStrip.trim().slice(0, 200))
-   * Absent on standalone (non-continuation) transcripts.
+   * Stable per-chain hash, set on every transcript in a multi-transcript
+   * auto-continuation chain — ORIGINAL INCLUDED.
    *
-   * Carrying the same `continuationGroupId` across transcripts in the same
-   * chain is not guaranteed by the formula alone — the ingester correlates
-   * them via `sessionSlug` + transcript createdAt ordering. The presence of
-   * the field on a transcript is itself the "this was a continuation" signal.
+   * Computed as
+   *   sha256("v1|" + sessionSlug + "|" + originalFirstUserMessage.trim().slice(0, 200))
+   * where `originalFirstUserMessage` is the first user_text of the original
+   * transcript in the chain (the one whose `scaffoldStripped === false`).
+   * That same hash is then assigned to every transcript in the chain, so the
+   * ingester can group them via a single GROUP BY continuationGroupId.
+   *
+   * Standalone transcripts (sessions with only one parent .jsonl in the slug
+   * folder) do NOT carry this field. Absence unambiguously means "this is a
+   * standalone session, not part of any chain."
+   *
+   * Spec lives in `docs/ways-of-work/plan/content-pipeline-v2/cowork-exporter/brief.md`.
+   * Behavior was revised after Hassan's production runs 1-3 surfaced 3-of-4
+   * hash collisions within a single chain. See CHANGELOG entry
+   * "data-contract fixes" for the rationale.
    */
   continuationGroupId?: string;
   /** True if a scaffold message ("This session is being continued from...") was found and stripped from the start of the transcript. */

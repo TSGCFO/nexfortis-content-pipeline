@@ -15,9 +15,8 @@ import { parseTranscript } from './parser.js';
 import { postCheckSession } from './post-check.js';
 import { buildAuditRows, summarize } from './audit.js';
 import {
+  assignContinuationGroupIds,
   stripContinuationScaffold,
-  computeContinuationGroupId,
-  firstUserText,
   SCAFFOLD_PREFIX,
 } from './continuation.js';
 import {
@@ -84,16 +83,13 @@ export async function runDiscovery(
       for (const e of transcript.events) allEventsForPostCheck.push(e);
     }
 
-    // If this session has multiple parent transcripts in the same slug folder,
-    // it's a continuation chain. Compute a continuationGroupId for EACH
-    // transcript using its own first user message after scaffold strip.
-    if (transcripts.length > 1 && slug) {
-      for (const t of transcripts) {
-        const head = firstUserText(t.events);
-        if (head.length > 0) {
-          t.continuationGroupId = computeContinuationGroupId(slug, head);
-        }
-      }
+    // Chain groupId assignment — see assignContinuationGroupIds in
+    // continuation.ts for the full rule. Briefly: every transcript in a
+    // multi-transcript chain (original included) gets the SAME groupId,
+    // derived from the original's first user message. Standalone sessions
+    // get no groupId.
+    if (slug) {
+      assignContinuationGroupIds(transcripts, slug);
     }
 
     const postCheck = postCheckSession(allEventsForPostCheck, options.config);

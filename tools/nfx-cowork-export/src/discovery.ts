@@ -241,21 +241,58 @@ async function fileExists(p: string): Promise<boolean> {
  */
 function extractSessionMeta(raw: Record<string, unknown>): SessionMeta {
   const meta: SessionMeta = {};
-  const assign = (key: keyof SessionMeta, v: unknown): void => {
+  const assignString = (key: keyof SessionMeta, v: unknown): void => {
     if (typeof v === 'string') {
       (meta as Record<string, string>)[key] = v;
     }
   };
 
-  assign('sessionId', raw['sessionId']);
-  assign('title', raw['title']);
-  assign('emailAddress', raw['emailAddress']);
-  assign('accountName', raw['accountName']);
-  assign('cwd', raw['cwd']);
-  assign('createdAt', raw['createdAt']);
-  assign('lastActivityAt', raw['lastActivityAt']);
-  assign('initialMessage', raw['initialMessage']);
-  assign('model', raw['model']);
+  // For createdAt / lastActivityAt: Cowork stores these as NUMBERS (epoch ms),
+  // not as ISO strings. The old extractor only handled strings, so the field
+  // was silently dropped. Now we accept both formats and convert numbers to
+  // ISO UTC ms before storing.
+  const assignTimestamp = (key: 'createdAt' | 'lastActivityAt', v: unknown): void => {
+    if (typeof v === 'string' && v.length > 0) {
+      meta[key] = v;
+      return;
+    }
+    if (typeof v === 'number' && Number.isFinite(v)) {
+      // Epoch milliseconds. JS Date handles this directly.
+      const iso = new Date(v).toISOString();
+      // toISOString() produces "YYYY-MM-DDTHH:mm:ss.sssZ" — already the
+      // schema's required format. Validation regex in schema.ts will accept.
+      meta[key] = iso;
+    }
+  };
+
+  assignString('sessionId', raw['sessionId']);
+  assignString('title', raw['title']);
+  assignString('emailAddress', raw['emailAddress']);
+  assignString('accountName', raw['accountName']);
+  assignString('cwd', raw['cwd']);
+  assignTimestamp('createdAt', raw['createdAt']);
+  assignTimestamp('lastActivityAt', raw['lastActivityAt']);
+  assignString('initialMessage', raw['initialMessage']);
+  assignString('model', raw['model']);
+
+  // mcpServers — Cowork stores this under `remoteMcpServersConfig` as an
+  // array of objects with a `name` field (plus uuid, tools schema, etc.).
+  // We extract just the names. Absent in meta if no servers were configured.
+  const remote = raw['remoteMcpServersConfig'];
+  if (Array.isArray(remote)) {
+    const names: string[] = [];
+    for (const entry of remote) {
+      if (entry !== null && typeof entry === 'object') {
+        const n = (entry as Record<string, unknown>)['name'];
+        if (typeof n === 'string' && n.length > 0) {
+          names.push(n);
+        }
+      }
+    }
+    if (names.length > 0) {
+      meta.mcpServers = names;
+    }
+  }
 
   return meta;
 }
