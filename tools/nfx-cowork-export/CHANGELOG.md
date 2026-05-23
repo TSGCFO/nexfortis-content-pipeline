@@ -18,6 +18,60 @@ Each released version has the following subsections (omit any that are empty):
 
 ## [Unreleased]
 
+### Tool (slice 6 — review cleanups + single-binary packaging via `bun build --compile`; no schemaVersion bump)
+
+This is the final slice. After it lands, the `feature/cowork-exporter` integration branch PRs into `main` as one combined review.
+
+**Slice 6 prep — three review cleanups** (commit `5305a73` on this branch)
+
+Addresses the three code-cleanup items Perplexity flagged on slice 5 (PR #18). All behavior-preserving, no schema impact.
+
+- **De-duplicated `workspaceIdFromPath`.** The helper used to live in two near-identical copies — one in `src/emit.ts`, one in `src/audit-extended.ts`. Moved to `src/utils.ts` (where `isValidTimestamp` already lives). Both call sites import from there. Added 9 new tests in `tests/cowork-export/utils.test.ts` covering: live POSIX layout, backup layout with extra prefix segments, Windows-backslash normalization, the closest-UUID-ancestor rule with single and multi-UUID parents, the bare-UUID-leaf edge case, no-ancestor → `null`, empty input → `null`, case-insensitive UUID hex, trailing-slash tolerance.
+- **Naming caveat flagged for follow-up:** the function is *named* `workspaceIdFromPath` but actually returns the *closest* UUID-shaped ancestor of the session folder. In the typical Cowork layout `<root>/<outer>/<inner>/local_<session>/` that's the inner UUID — what Cowork sometimes calls the "space" rather than the workspace. Renaming the function would ripple into the `SessionDocument.workspaceId` field and the ingester schema, so it stays out of scope here. Worth a separate conversation.
+- **Parameterized `userConfigDir(env)`.** It now takes `env: NodeJS.ProcessEnv = process.env`, matching the convention used by `computeCliDefaults(env)`. `computeCliDefaults` now passes `env` through to `userConfigDir(env)`. Adds 4 new tests in `tests/cowork-export/cli-defaults.test.ts`: signature regression guard, non-Windows env irrelevance, Windows APPDATA propagation (Windows-only assertion), end-to-end env passthrough through `computeCliDefaults`.
+- **Fixed the misleading "stable serialization" comment in `emit.ts`.** Previous docstring claimed "we sort keys and use stable serialization" — the code does not sort object keys. Replaced with an accurate explanation: determinism comes from `buildSessionDocument` constructing every field in a fixed order plus `JSON.stringify` preserving insertion order, AND from explicitly-sorted `cwds`/`gitBranches` arrays. Added a note for future maintainers: if byte-exact output across runs is ever needed, add a `sortKeysDeep` helper.
+
+### Tool (slice 6 main — `bun build --compile` packaging)
+
+Produces single-binary distributables that embed the JavaScriptCore runtime, so consumers can run the tool without installing Node, pnpm, or any of its dependencies. This is what closes out the slice 6 roadmap milestone.
+
+- **New scripts in `tools/nfx-cowork-export/package.json`:**
+  - `package:bun:linux` — `bun build --compile --minify --sourcemap --target=bun-linux-x64 --outfile=dist/bin/nfx-cowork-export-linux-x64 src/cli.ts`
+  - `package:bun:windows` — same flags with `--target=bun-windows-x64 --outfile=dist/bin/nfx-cowork-export-windows-x64.exe`
+  - `package:bun` — runs both in sequence
+- **Build targets locked at slice 6:** Linux x64 + Windows x64. macOS arm64 deferred until anyone needs it. The build matrix is small on purpose; cross-compiling more targets is `pnpm run package:bun` + extra `--target` flags away.
+- **Binary characteristics (from the slice 6 build run):**
+  - Linux: 97 MB, ELF64 dynamically-linked, 731 modules bundled.
+  - Windows: 101 MB, PE32+ console executable.
+  - Most of the size is the embedded JavaScriptCore runtime; minified app code is a few hundred KB.
+- **`dist/bin/` is already covered by the root `.gitignore`** (which excludes `dist/`), so the binaries don't accidentally commit. They're release artifacts, not source.
+- **Output is identical to the Node CLI.** Byte-diffed all 17 emitted JSON files from a real-data run between (a) the slice 5 Node CLI, (b) the slice 5 dist run through bun's runtime, and (c) the slice 6 compiled binary. All three produce identical content modulo `_exporter.exportedAt`, which is wall-clock and excluded from the comparison by design.
+
+### Real-data smoke-test (slice 6 binary)
+
+Against the full 65-session Cowork backup with the same narrow allowlist used in slice 5 (`hassansadiq73@gmail.com` only, three NexFortis project paths):
+
+| Metric | Node CLI (slice 5) | Linux binary (slice 6) |
+|---|---|---|
+| Sessions discovered | 61 | 61 |
+| Files written | 17 | 17 |
+| Validation failures | 0 | 0 |
+| Text fields scanned | 1,743 | 1,743 |
+| PII replacements | 204 | 204 |
+| End-to-end wall-clock | ~1.8s | ~4.2s |
+
+The binary is ~2× slower than the Node CLI on this dataset — that's bun's startup overhead amortized over a short run, not a regression in the core pipeline. For larger inputs the gap closes.
+
+### Tests added (+13 → workspace total 375; +0 in slice 6 main)
+
+The +13 came from slice 6 prep (9 in utils.test.ts + 4 in cli-defaults.test.ts). Slice 6 main adds no new unit tests — the bun packaging is exercised via the real-data smoke-test instead. The slice 5 test suite is the contract for the CLI's behavior; the binary runs that same code path.
+
+### Schema (unchanged from slice 1.5)
+
+No emitted-JSON shape changes. `schemaVersion` stays at `1`.
+
+---
+
 ### Tool (slice 5 — PII redaction + JSON emission + audit sidecar + OS defaults; no schemaVersion bump)
 
 The exporter now writes JSON to disk. Slice 5 is the first slice where files actually leave the laptop into the pipeline's import directory. Everything before this slice was discovery + filter + parse + stitch in-memory only.

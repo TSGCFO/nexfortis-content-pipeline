@@ -1,6 +1,6 @@
 {
   "name": "@ncp/cowork-export",
-  "version": "0.0.5",
+  "version": "0.0.6",
   "private": true,
   "type": "module",
   "description": "Local CLI that reads Cowork on-disk session data and emits normalized JSON files for the NexFortis content pipeline ingester.",
@@ -25,7 +25,10 @@
   ],
   "scripts": {
     "build": "tsc --build",
-    "typecheck": "tsc --build"
+    "typecheck": "tsc --build",
+    "package:bun:linux": "bun build --compile --minify --sourcemap --target=bun-linux-x64 --outfile=dist/bin/nfx-cowork-export-linux-x64 src/cli.ts",
+    "package:bun:windows": "bun build --compile --minify --sourcemap --target=bun-windows-x64 --outfile=dist/bin/nfx-cowork-export-windows-x64.exe src/cli.ts",
+    "package:bun": "pnpm run package:bun:linux && pnpm run package:bun:windows"
   },
   "dependencies": {
     "@ncp/redaction": "workspace:*",

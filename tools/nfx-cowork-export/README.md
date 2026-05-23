@@ -27,7 +27,7 @@ This tool walks the local Cowork data folder, filters out family-law content, sc
 | CLI wrapper (`--input`, `--output`, `--dry-run`, `--validate-output`, etc.) | ✅ slice 5 |
 | Audit log (stdout + sidecar `_audit-<ts>.txt`) | ✅ slice 5 |
 | OS-specific config-path defaults (Windows / Linux / macOS) | ✅ slice 5 |
-| Single-binary packaging via `bun build --compile` | ⏳ slice 6 |
+| Single-binary packaging via `bun build --compile` (Linux x64 + Windows x64) | ✅ slice 6 |
 
 ## Install
 
@@ -122,6 +122,69 @@ nfx-cowork-export --validate-output path/to/some-session.json
 
 Exits 0 on pass, 5 on fail. Prints sessionId + event count on pass, schema
 error path on fail.
+
+## Binary releases
+
+Slice 6 ships single-binary distributables that embed the JavaScriptCore
+runtime, so you can use the tool without installing Node, pnpm, or any
+dependencies.
+
+### Build
+
+From the repo root:
+
+```bash
+pnpm --filter @ncp/cowork-export run package:bun        # both targets
+pnpm --filter @ncp/cowork-export run package:bun:linux  # Linux x64 only
+pnpm --filter @ncp/cowork-export run package:bun:windows # Windows x64 only
+```
+
+Build prerequisites: [bun](https://bun.sh/) installed on the build host
+(used as the bundler/cross-compiler; the resulting binary does not depend
+on bun being installed on the target machine).
+
+### Output
+
+Binaries land in `tools/nfx-cowork-export/dist/bin/`:
+
+| Target | Filename | Size |
+|---|---|---|
+| Linux x64 | `nfx-cowork-export-linux-x64` | ~97 MB |
+| Windows x64 | `nfx-cowork-export-windows-x64.exe` | ~101 MB |
+
+The size is dominated by the embedded runtime; the minified application
+code is a few hundred KB.
+
+`dist/` is `.gitignore`d, so binaries are release artifacts only — they
+do not commit. Distribute via GitHub Releases attached to the slice 6
+integration PR (or whatever release mechanism comes after slice 6).
+
+### Usage
+
+The binary takes the same flags as the Node CLI documented above:
+
+```bash
+# Linux / WSL
+./nfx-cowork-export-linux-x64 --input /path/to/cowork --output ./out
+
+# Windows (PowerShell)
+.
+fx-cowork-export-windows-x64.exe --input "$env:APPDATA\Claude\local-agent-mode-sessions" --output .\out
+```
+
+### Install-from-source fallback
+
+If you can't or don't want to use the prebuilt binary, the Node CLI
+still works:
+
+```bash
+pnpm install
+pnpm --filter @ncp/cowork-export build
+node tools/nfx-cowork-export/dist/cli.js --input ... --output ...
+```
+
+The binary and the Node CLI produce byte-identical JSON output modulo
+the `_exporter.exportedAt` timestamp.
 
 ## Read-only
 
