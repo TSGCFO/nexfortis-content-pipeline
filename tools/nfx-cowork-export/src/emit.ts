@@ -40,7 +40,7 @@ import { workspaceIdFromPath } from './utils.js';
 
 /** Package metadata baked into `_exporter`. */
 export const EXPORTER_NAME = 'nfx-cowork-export';
-export const EXPORTER_VERSION = '0.0.5';
+export const EXPORTER_VERSION = '0.0.6';
 export const SOURCE_FORMAT = 'cowork-jsonl-v1';
 
 export interface EmitOptions {
