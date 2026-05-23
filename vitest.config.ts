@@ -12,6 +12,7 @@ export default defineConfig({
       '@ncp/db': path.resolve(here, 'lib/db/src/index.ts'),
       '@ncp/embeddings': path.resolve(here, 'lib/embeddings/src/index.ts'),
       '@ncp/redaction': path.resolve(here, 'lib/redaction/src/index.ts'),
+      '@ncp/cowork-export': path.resolve(here, 'tools/nfx-cowork-export/src/index.ts'),
     },
   },
   test: {

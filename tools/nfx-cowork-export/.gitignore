@@ -1,0 +1,4 @@
+# Never commit real config — only the .example.json variants are tracked
+cwd-allowlist.json
+family-law-slugs.json
+account-allowlist.json

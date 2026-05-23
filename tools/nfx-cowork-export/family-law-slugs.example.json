@@ -1,0 +1,10 @@
+{
+  "_comment": "List of Cowork session slugs to exclude unconditionally. Sessions whose slug matches any entry here are dropped entirely — the session metadata is read only enough to identify the slug, and the .jsonl transcript is never opened. Copy this file to ~/.config/nfx-cowork-export/family-law-slugs.json (or Windows equivalent) and populate with your real slugs. The real file MUST NOT be committed to version control; the example file is shape-only.",
+
+  "_matching": "Slugs are matched case-sensitively against the exact slug component of the session path (i.e. the part after '-sessions-' in the projects folder name). No regex, no wildcards in v1. The matching code in @ncp/redaction logs SHA-256 hashes of matched slugs to the audit log, never the slugs themselves.",
+
+  "slugs": [
+    "synthetic-example-slug-do-not-use",
+    "another-synthetic-example-slug"
+  ]
+}

@@ -1,4 +1,6 @@
 export { redact } from './redact.js';
+export { regexPass } from './regex-pass.js';
+export type { RegexPassResult, RegexReplacement } from './regex-pass.js';
 export {
   checkBlocklist,
   assertNotBlocked,
@@ -13,6 +15,14 @@ export type {
   BlocklistResult,
   CheckBlocklistOptions,
 } from './blocklist.js';
+export {
+  checkSlugBlocklist,
+  hashSlug,
+} from './slug-blocklist.js';
+export type {
+  SlugBlocklistResult,
+  CheckSlugBlocklistOptions,
+} from './slug-blocklist.js';
 export type {
   BlockReason,
   PiiStatus,
