@@ -30,6 +30,7 @@ import type { AuditSummary } from './audit.js';
 import type { ParsedSession } from './types.js';
 import type { EmitResult } from './emit.js';
 import type { RedactionSummary } from './redact-events.js';
+import { workspaceIdFromPath } from './utils.js';
 
 export interface ExtendedAuditInputs {
   rows: readonly AuditRow[];
@@ -195,15 +196,4 @@ export async function writeAuditSidecar(
   await fs.mkdir(outputDir, { recursive: true });
   await fs.writeFile(fullPath, text, 'utf8');
   return fullPath;
-}
-
-function workspaceIdFromPath(sessionFolder: string): string | null {
-  const norm = sessionFolder.replace(/\\/g, '/');
-  const segments = norm.split('/').filter((s) => s.length > 0);
-  const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-  for (let i = segments.length - 2; i >= 0; i--) {
-    const seg = segments[i]!;
-    if (uuidPattern.test(seg)) return seg;
-  }
-  return null;
 }
