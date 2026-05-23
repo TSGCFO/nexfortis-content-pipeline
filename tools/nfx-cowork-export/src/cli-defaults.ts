@@ -36,9 +36,18 @@ function detectPlatform(): Platform {
   return 'linux';
 }
 
-function userConfigDir(): string {
+/**
+ * Resolve the directory where this tool's three config files live.
+ *
+ * Takes `env` as a default-valued parameter so unit tests can inject a
+ * controlled environment — matches the convention used by
+ * `computeCliDefaults(env)` below. The function still reads `process.platform`
+ * via `detectPlatform()`; tests that want to exercise the Windows code path
+ * on non-Windows hosts have to mock that separately.
+ */
+export function userConfigDir(env: NodeJS.ProcessEnv = process.env): string {
   if (detectPlatform() === 'windows') {
-    const appdata = process.env['APPDATA'];
+    const appdata = env['APPDATA'];
     if (appdata !== undefined && appdata.length > 0) {
       return path.join(appdata, 'nfx-cowork-export');
     }
@@ -59,7 +68,7 @@ export interface CliDefaults {
 
 export function computeCliDefaults(env: NodeJS.ProcessEnv = process.env): CliDefaults {
   const platform = detectPlatform();
-  const userConf = userConfigDir();
+  const userConf = userConfigDir(env);
 
   let inputRoot: string | null;
   if (platform === 'windows') {

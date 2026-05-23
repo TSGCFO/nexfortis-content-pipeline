@@ -13,9 +13,20 @@
  *
  * Idempotency: re-running on the same data produces the same JSON content,
  * EXCEPT `_exporter.exportedAt`. The ingester dedupes on `sessionId` and
- * ignores `_exporter.*` for that purpose. The exporter's job here is to
- * produce a deterministic byte-stable JSON given a deterministic input —
- * we sort keys and use stable serialization to make that hold.
+ * ignores `_exporter.*` for that purpose.
+ *
+ * Determinism comes from two things, NOT from object-key sorting:
+ *   1. `buildSessionDocument` constructs every field in a fixed order, and
+ *      `JSON.stringify` preserves insertion order for string-keyed
+ *      properties — so the output object's key order is stable.
+ *   2. The `cwds` and `gitBranches` arrays are explicitly sorted before
+ *      they go into the document, so set membership produces the same
+ *      sequence on every run.
+ *
+ * We do NOT sort keys at serialization time. The ingester doesn't care
+ * about key order; it parses to a logical document and dedupes on
+ * `sessionId`. If a future consumer needs byte-exact output across runs,
+ * add a `sortKeysDeep` helper here — don't rely on the current setup.
  */
 
 import { promises as fs } from 'node:fs';
@@ -25,6 +36,7 @@ import { validateSession, SessionValidationError } from './validator.js';
 import type { SessionDocument, Event } from './schema.js';
 import { SCHEMA_VERSION } from './schema.js';
 import type { ParsedSession, ParsedTranscript, SessionDiscovery } from './types.js';
+import { workspaceIdFromPath } from './utils.js';
 
 /** Package metadata baked into `_exporter`. */
 export const EXPORTER_NAME = 'nfx-cowork-export';
@@ -197,25 +209,6 @@ function primarySlug(d: SessionDiscovery): string | null {
   return null;
 }
 
-/**
- * Extract the workspace UUID from a session-folder path. The path shape is
- * `<root>/<workspace-uuid>/<space-uuid>/local_<session-uuid>/...` (live) or
- * `<root>/raw-backup-<ts>/<workspace-uuid>/<space-uuid>/local_<session-uuid>/...`
- * (exported backup). The workspace UUID is the third-from-bottom segment in
- * the live layout, fourth-from-bottom in backup layout. We pick the
- * lowest-level segment that LOOKS like a UUID (8-4-4-4-12 hex).
- */
-function workspaceIdFromPath(sessionFolder: string): string | null {
-  const normalized = sessionFolder.replace(/\\/g, '/');
-  const segments = normalized.split('/').filter((s) => s.length > 0);
-  // Walk up from the session folder (local_<uuid>) and grab the first UUID-shaped ancestor.
-  const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-  for (let i = segments.length - 2; i >= 0; i--) {
-    const seg = segments[i]!;
-    if (uuidPattern.test(seg)) return seg;
-  }
-  return null;
-}
 
 function collectCwdsAndBranches(events: readonly Event[]): { cwds: string[]; gitBranches: string[] } {
   const cwdSet = new Set<string>();

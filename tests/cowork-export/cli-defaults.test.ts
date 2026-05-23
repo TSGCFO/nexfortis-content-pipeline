@@ -2,7 +2,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { describe, expect, it } from 'vitest';
 
-import { computeCliDefaults } from '../../tools/nfx-cowork-export/src/cli-defaults.js';
+import { computeCliDefaults, userConfigDir } from '../../tools/nfx-cowork-export/src/cli-defaults.js';
 
 describe('computeCliDefaults', () => {
   it('produces an outputDir under cwd', () => {
@@ -35,5 +35,55 @@ describe('computeCliDefaults', () => {
     if (process.platform === 'win32' || process.platform === 'darwin') return;
     const d = computeCliDefaults({});
     expect(d.inputRoot).toBeNull();
+  });
+});
+
+describe('userConfigDir env parameterization', () => {
+  // The env parameter is wired through computeCliDefaults so unit tests can
+  // exercise the Windows APPDATA branch with a controlled environment without
+  // mutating real process.env. On Windows hosts the assertions below check
+  // env propagation directly; on non-Windows hosts userConfigDir ignores env
+  // (uses ~/.config/...), so we instead assert the function is callable with
+  // an arbitrary env and produces a stable path.
+  //
+  // TODO(#20): the Windows-only assertions below early-return on the Linux
+  // CI host, so PR CI never actually exercises the Windows code paths. Fix
+  // by parameterizing detectPlatform() the same way userConfigDir(env) was
+  // parameterized in slice 6 prep — pass platform as a default-valued
+  // parameter and have these tests supply 'win32' explicitly. See
+  // https://github.com/TSGCFO/nexfortis-content-pipeline/issues/20.
+  it('accepts an env parameter without erroring (signature regression guard)', () => {
+    expect(() => userConfigDir({})).not.toThrow();
+    expect(() => userConfigDir({ APPDATA: '/some/fake/path' })).not.toThrow();
+  });
+
+  it('on non-Windows, env is unused — passing different envs yields the same path', () => {
+    if (process.platform === 'win32') return;
+    const a = userConfigDir({});
+    const b = userConfigDir({ APPDATA: 'C:\\Users\\Foo\\AppData\\Roaming' });
+    const c = userConfigDir({ HOME: '/tmp/elsewhere' });
+    expect(a).toBe(b);
+    expect(b).toBe(c);
+  });
+
+  it('on Windows hosts, the APPDATA env override is honored', () => {
+    if (process.platform !== 'win32') return;
+    const d = userConfigDir({ APPDATA: 'C:\\Custom\\Roaming' });
+    expect(d).toBe(path.join('C:\\Custom\\Roaming', 'nfx-cowork-export'));
+  });
+
+  it('computeCliDefaults(env) propagates env to userConfigDir', () => {
+    // Smoke test: changing env should change the config paths IF and only IF
+    // we are on Windows. On non-Windows the env is ignored — assert nothing
+    // breaks under either configuration.
+    const a = computeCliDefaults({});
+    const b = computeCliDefaults({ APPDATA: 'C:\\Fake\\Roaming' });
+    if (process.platform === 'win32') {
+      // On Windows: APPDATA-controlled paths should differ.
+      expect(a.cwdAllowlist).not.toBe(b.cwdAllowlist);
+    } else {
+      // On non-Windows: paths are identical because env is unused.
+      expect(a.cwdAllowlist).toBe(b.cwdAllowlist);
+    }
   });
 });
