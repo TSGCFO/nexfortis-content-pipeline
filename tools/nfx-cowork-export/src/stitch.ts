@@ -183,7 +183,15 @@ export function doStitch(
     const matched = stitchables[matchedIdx]!;
     used.add(matchedIdx);
 
-    const filename = matched.file.split('/').pop() ?? matched.file;
+    // Normalize backslashes to forward slashes BEFORE splitting, so paths
+    // captured on Windows hosts ('.../subagents/agent-<id>.jsonl' with
+    // backslashes) yield the same basename as POSIX paths. Otherwise the
+    // emitted `subagentSlug` ends up containing the full Windows path
+    // including the user's account name — a leak and a violation of the
+    // schema contract (subagentSlug is meant to be a stable identifier
+    // like 'agent-a68b00e493569b47e', not a source-of-truth path).
+    const normalizedPath = matched.file.replace(/\\/g, '/');
+    const filename = normalizedPath.split('/').pop() ?? matched.file;
     const subagentSlug = filename.replace(/\.jsonl$/i, '');
 
     const subagentEvent: SubagentEvent = {

@@ -402,3 +402,98 @@ describe('parser → stitcher: toolUseIdsByEventUuid integration', () => {
     }
   });
 });
+
+describe('doStitch — subagentSlug path normalization (Bug 1 regression)', () => {
+  // Before the fix, stitch.ts used `matched.file.split('/').pop()` which only
+  // handled POSIX path separators. On Windows hosts, where matched.file is a
+  // backslash path, the emitted subagentSlug ended up being the FULL path
+  // including the user's Windows account name — a leak AND a schema contract
+  // violation (subagentSlug is supposed to be a stable identifier).
+
+  const SLUG_PATTERN = /^agent-[a-f0-9]+$/i;
+
+  it('extracts the basename from a POSIX path', () => {
+    const stitchables: Stitchable[] = [
+      {
+        file: '/home/user/sessions/.claude/projects/-sessions-foo/abc/subagents/agent-a68b00e493569b47e.jsonl',
+        slug: 'foo',
+        firstUserPrefix: 'do thing',
+        events: [],
+      },
+    ];
+    const toolUseIds = new Map([['agent-call-uuid-1', 'toolu_X']]);
+    const dispatchMap = new Map([['toolu_X', 'do thing — full prompt']]);
+    const r = doStitch(
+      [userText('parent prompt'), toolCall(AGENT_TOOL_NAME, 'agent-call-uuid-1')],
+      stitchables,
+      dispatchMap,
+      toolUseIds,
+    );
+    expect(r.events[1]!.kind).toBe('subagent');
+    if (r.events[1]!.kind === 'subagent') {
+      const slug = r.events[1]!.subagentSlug;
+      expect(slug).toBe('agent-a68b00e493569b47e');
+      expect(slug).toMatch(SLUG_PATTERN);
+      expect(slug).not.toContain('/');
+      expect(slug).not.toContain('\\');
+      expect(slug).not.toContain(':');
+      expect(slug).not.toContain('subagents');
+    }
+  });
+
+  it('extracts the basename from a Windows backslash path (the bug-1 reproducer)', () => {
+    // This is the exact shape of matched.file when Cowork data is captured
+    // on a Windows host. The user's account name appears in the path.
+    const winPath =
+      'C:\\Users\\HassanSadiq\\AppData\\Roaming\\Claude\\local-agent-mode-sessions\\d6771dfa-6c04-4bc4-ada6-1960230d4c67\\b8939306-78af-44bb-9e9d-c1579a2fef18\\local_a6fa0a85-86c0-4385-9ef0-aed87e7b860c\\.claude\\projects\\-sessions-beautiful-blissful-volta\\736b4bb8-3987-42de-8c42-2931883d3abc\\subagents\\agent-a3f4895f634f2b33a.jsonl';
+    const stitchables: Stitchable[] = [
+      { file: winPath, slug: 'beautiful-blissful-volta', firstUserPrefix: 'do thing', events: [] },
+    ];
+    const toolUseIds = new Map([['agent-call-uuid-1', 'toolu_W']]);
+    const dispatchMap = new Map([['toolu_W', 'do thing — full prompt']]);
+    const r = doStitch(
+      [userText('parent prompt'), toolCall(AGENT_TOOL_NAME, 'agent-call-uuid-1')],
+      stitchables,
+      dispatchMap,
+      toolUseIds,
+    );
+    expect(r.events[1]!.kind).toBe('subagent');
+    if (r.events[1]!.kind === 'subagent') {
+      const slug = r.events[1]!.subagentSlug;
+      expect(slug).toBe('agent-a3f4895f634f2b33a');
+      expect(slug).toMatch(SLUG_PATTERN);
+      // Critical: no path content of any kind, especially no username
+      expect(slug).not.toContain('/');
+      expect(slug).not.toContain('\\');
+      expect(slug).not.toContain(':');
+      expect(slug).not.toContain('subagents');
+      expect(slug).not.toContain('HassanSadiq');
+      expect(slug).not.toContain('Users');
+      expect(slug).not.toContain('AppData');
+    }
+  });
+
+  it('extracts the basename from a mixed-separator path (defensive)', () => {
+    const stitchables: Stitchable[] = [
+      {
+        file: 'C:/Users/HassanSadiq\\AppData/subagents\\agent-abcdef0123.jsonl',
+        slug: 'x',
+        firstUserPrefix: 'p',
+        events: [],
+      },
+    ];
+    const toolUseIds = new Map([['a', 'toolu_M']]);
+    const dispatchMap = new Map([['toolu_M', 'p — full']]);
+    const r = doStitch(
+      [userText('parent prompt'), toolCall(AGENT_TOOL_NAME, 'a')],
+      stitchables,
+      dispatchMap,
+      toolUseIds,
+    );
+    if (r.events[1]!.kind === 'subagent') {
+      expect(r.events[1]!.subagentSlug).toBe('agent-abcdef0123');
+      expect(r.events[1]!.subagentSlug).not.toContain('\\');
+      expect(r.events[1]!.subagentSlug).not.toContain('/');
+    }
+  });
+});

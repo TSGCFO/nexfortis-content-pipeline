@@ -326,3 +326,150 @@ describe('classifyTranscriptPath — WINDOWS-style paths (regression test)', () 
     ).toBeNull();
   });
 });
+
+describe('extractSessionMeta — number-format timestamps + mcpServers (Bug 3 regression)', () => {
+  // Cowork stores createdAt / lastActivityAt as NUMBERS (epoch ms), not as
+  // ISO strings. The old extractor only assigned values when `typeof v === 'string'`,
+  // so these were silently dropped from emitted JSONs. Bug 3a.
+  //
+  // Cowork stores MCP servers under `remoteMcpServersConfig` as an array of
+  // { uuid, name, tools: [...] } objects. The old extractor didn't read this
+  // field at all. Bug 3b.
+  //
+  // These tests reproduce both via a synthetic meta JSON and assert
+  // discoverSessions surfaces the parsed meta correctly.
+
+  it('extracts createdAt + lastActivityAt when source meta stores them as numbers (epoch ms)', async () => {
+    await makeSession({
+      workspaceId: 'ws-1',
+      spaceId: 'sp-1',
+      sessionId: 'session-numbers',
+      meta: {
+        sessionId: 'session-numbers',
+        // Numbers, not strings — this is the real Cowork format
+        createdAt: 1776112559346,
+        lastActivityAt: 1776112580302,
+      },
+      transcripts: [{ slug: 'numeric-ts', uuid: 'u-numeric' }],
+    });
+
+    const found = await discoverSessions(root);
+    const d = found.find((x) => x.sessionId === 'session-numbers')!;
+    // After the fix, these come through as ISO strings (toISOString format)
+    expect(d.meta?.createdAt).toBe('2026-04-13T20:35:59.346Z');
+    expect(d.meta?.lastActivityAt).toBe('2026-04-13T20:36:20.302Z');
+  });
+
+  it('still accepts string-format timestamps (back-compat)', async () => {
+    await makeSession({
+      workspaceId: 'ws-1',
+      spaceId: 'sp-1',
+      sessionId: 'session-strings',
+      meta: {
+        sessionId: 'session-strings',
+        createdAt: '2026-04-08T14:00:00.000Z',
+        lastActivityAt: '2026-04-08T14:30:00.000Z',
+      },
+      transcripts: [{ slug: 'string-ts', uuid: 'u-strings' }],
+    });
+
+    const found = await discoverSessions(root);
+    const d = found.find((x) => x.sessionId === 'session-strings')!;
+    expect(d.meta?.createdAt).toBe('2026-04-08T14:00:00.000Z');
+    expect(d.meta?.lastActivityAt).toBe('2026-04-08T14:30:00.000Z');
+  });
+
+  it('omits the field entirely when source has neither a string nor a finite number', async () => {
+    await makeSession({
+      workspaceId: 'ws-1',
+      spaceId: 'sp-1',
+      sessionId: 'session-bad-ts',
+      meta: {
+        sessionId: 'session-bad-ts',
+        createdAt: null,
+        lastActivityAt: 'not a valid timestamp',  // string but malformed — string assign still happens
+      },
+      transcripts: [{ slug: 'bad-ts', uuid: 'u-bad' }],
+    });
+
+    const found = await discoverSessions(root);
+    const d = found.find((x) => x.sessionId === 'session-bad-ts')!;
+    // null gets dropped (neither string nor number)
+    expect(d.meta?.createdAt).toBeUndefined();
+    // a malformed string still passes the string check — normalization happens later in emit
+    expect(d.meta?.lastActivityAt).toBe('not a valid timestamp');
+  });
+
+  it('extracts mcpServers from remoteMcpServersConfig — just the names', async () => {
+    await makeSession({
+      workspaceId: 'ws-1',
+      spaceId: 'sp-1',
+      sessionId: 'session-mcp',
+      meta: {
+        sessionId: 'session-mcp',
+        remoteMcpServersConfig: [
+          { uuid: 'aaa', name: 'composio', tools: [{ name: 'X', description: '...', inputSchema: {} }] },
+          { uuid: 'bbb', name: 'Gmail',    tools: [{ name: 'send_email', description: '...', inputSchema: {} }] },
+          { uuid: 'ccc', name: 'Claude_in_Chrome', tools: [] },
+        ],
+      },
+      transcripts: [{ slug: 'has-mcp', uuid: 'u-mcp' }],
+    });
+
+    const found = await discoverSessions(root);
+    const d = found.find((x) => x.sessionId === 'session-mcp')!;
+    expect(d.meta?.mcpServers).toEqual(['composio', 'Gmail', 'Claude_in_Chrome']);
+  });
+
+  it('omits mcpServers when remoteMcpServersConfig is absent', async () => {
+    await makeSession({
+      workspaceId: 'ws-1',
+      spaceId: 'sp-1',
+      sessionId: 'session-no-mcp',
+      meta: { sessionId: 'session-no-mcp' },
+      transcripts: [{ slug: 'no-mcp', uuid: 'u-no-mcp' }],
+    });
+
+    const found = await discoverSessions(root);
+    const d = found.find((x) => x.sessionId === 'session-no-mcp')!;
+    expect(d.meta?.mcpServers).toBeUndefined();
+  });
+
+  it('omits mcpServers when remoteMcpServersConfig is empty array', async () => {
+    await makeSession({
+      workspaceId: 'ws-1',
+      spaceId: 'sp-1',
+      sessionId: 'session-empty-mcp',
+      meta: { sessionId: 'session-empty-mcp', remoteMcpServersConfig: [] },
+      transcripts: [{ slug: 'empty-mcp', uuid: 'u-empty-mcp' }],
+    });
+
+    const found = await discoverSessions(root);
+    const d = found.find((x) => x.sessionId === 'session-empty-mcp')!;
+    expect(d.meta?.mcpServers).toBeUndefined();
+  });
+
+  it('skips malformed server entries (missing name, non-object, etc.)', async () => {
+    await makeSession({
+      workspaceId: 'ws-1',
+      spaceId: 'sp-1',
+      sessionId: 'session-bad-mcp',
+      meta: {
+        sessionId: 'session-bad-mcp',
+        remoteMcpServersConfig: [
+          { uuid: 'aaa', name: 'good' },
+          { uuid: 'bbb' },           // missing name
+          'not an object',            // garbage
+          null,                       // null
+          { uuid: 'ccc', name: '' },  // empty string name
+          { uuid: 'ddd', name: 'good2' },
+        ],
+      },
+      transcripts: [{ slug: 'malformed-mcp', uuid: 'u-malformed' }],
+    });
+
+    const found = await discoverSessions(root);
+    const d = found.find((x) => x.sessionId === 'session-bad-mcp')!;
+    expect(d.meta?.mcpServers).toEqual(['good', 'good2']);
+  });
+});

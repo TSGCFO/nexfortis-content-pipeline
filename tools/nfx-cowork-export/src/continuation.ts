@@ -12,14 +12,16 @@
  *    first user_text event when it begins with the canonical prefix.
  *
  * 2. Sessions whose `-sessions-<slug>/` directory contains more than one
- *    parent transcript are continuation chains. Each transcript gets its own
- *    `continuationGroupId` — a stable hash over the slug + first user message
- *    AFTER scaffold strip — and the ingester groups them by `sessionSlug` +
- *    `createdAt` ordering.
+ *    parent transcript are continuation chains. The CONTINUATIONS (transcripts
+ *    whose first event was a scaffold message that got stripped) all share a
+ *    single `continuationGroupId` — a stable hash over the slug + first user
+ *    message of the ORIGINAL transcript in the chain (the one without a
+ *    scaffold). The ORIGINAL transcript itself does NOT get a
+ *    `continuationGroupId`.
  *
  * 3. Standalone sessions (one parent transcript in the slug folder) do NOT
- *    get a `continuationGroupId`. The presence of the field is itself the
- *    signal that this transcript was a continuation.
+ *    get a `continuationGroupId`. Same for chain originals. The presence of
+ *    the field is itself the "I am a continuation of something" signal.
  */
 
 import { createHash } from 'node:crypto';
@@ -57,17 +59,23 @@ export function stripContinuationScaffold(events: readonly Event[]): ScaffoldStr
 }
 
 /**
- * Compute the stable continuation-group hash for a transcript.
+ * Compute the stable continuation-group hash for a chain.
  *
  * Formula (locked in v1 — see CHANGELOG):
- *   sha256("v1|" + slug + "|" + firstUserMessageAfterScaffoldStrip.trim().slice(0, 200))
+ *   sha256("v1|" + slug + "|" + originalFirstUserMessage.trim().slice(0, 200))
+ *
+ * `originalFirstUserMessage` is the first user_text of the ORIGINAL transcript
+ * in the chain (the one whose `scaffoldStripped === false`). The same value
+ * is then assigned to every CONTINUATION transcript in the chain. The
+ * original itself does NOT receive this field.
  *
  * The "v1|" prefix is intentional so a future formula change doesn't collide
  * with v1 hashes. The 200-char slice keeps the hash stable even when the
  * first user message is long.
  *
- * Caller is responsible for deciding whether to emit the field — typically
- * "compute and emit only when the transcript is part of a chain of size >= 2."
+ * This function is pure — it just hashes inputs. The orchestrator
+ * (run-discovery.ts) is responsible for identifying the original, picking its
+ * first user message, and propagating the result to the continuations.
  */
 export function computeContinuationGroupId(
   slug: string,
@@ -89,3 +97,41 @@ export function firstUserText(events: readonly Event[]): string {
   }
   return '';
 }
+
+
+/**
+ * Apply the chain-groupId rule to a list of transcripts (mutates in place).
+ *
+ * Rule:
+ *   - If transcripts.length < 2, do nothing (standalone session).
+ *   - Otherwise find the ORIGINAL (the unique transcript whose
+ *     scaffoldStripped === false) and compute a shared hash from its first
+ *     user message.
+ *   - Assign that shared hash to every CONTINUATION (scaffoldStripped === true).
+ *   - The original itself is NOT assigned; if no original is found (degenerate
+ *     case where all transcripts were stripped), nothing is assigned at all.
+ *
+ * This was extracted from `run-discovery.ts` so it can be unit-tested without
+ * setting up disk fixtures. The orchestrator just calls this once per session.
+ */
+export function assignContinuationGroupIds(
+  transcripts: ReadonlyArray<{
+    events: readonly Event[];
+    scaffoldStripped: boolean;
+    continuationGroupId?: string;
+  }>,
+  slug: string,
+): void {
+  if (transcripts.length < 2 || slug.length === 0) return;
+  const original = transcripts.find((t) => !t.scaffoldStripped);
+  if (!original) return;
+  const head = firstUserText(original.events);
+  if (head.length === 0) return;
+  const sharedGroupId = computeContinuationGroupId(slug, head);
+  for (const t of transcripts) {
+    if (t.scaffoldStripped) {
+      (t as { continuationGroupId?: string }).continuationGroupId = sharedGroupId;
+    }
+  }
+}
+

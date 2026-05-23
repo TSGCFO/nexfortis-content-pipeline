@@ -175,13 +175,21 @@ export function buildSessionDocument(
   const workspaceId = workspaceIdFromPath(session.discovery.sessionFolder);
   if (workspaceId !== null) doc.workspaceId = workspaceId;
 
+  // title is optional in source meta — Cowork generates titles
+  // asynchronously after a session starts, so newly-created sessions can have
+  // no title yet. Absence here means "source meta had no title field"; the
+  // ingester treats the absent field as "unnamed session".
   if (meta?.title !== undefined) doc.title = meta.title;
+
   if (meta?.lastActivityAt !== undefined) {
     const norm = normalizeTimestamp(meta.lastActivityAt);
     if (norm !== null) doc.lastActivityAt = norm;
   }
   if (meta?.model !== undefined) doc.model = meta.model;
   if (meta?.emailAddress !== undefined) doc.account = meta.emailAddress;
+  if (meta?.mcpServers !== undefined && meta.mcpServers.length > 0) {
+    doc.mcpServers = [...meta.mcpServers];
+  }
 
   // Unique cwds and gitBranches seen across all events (recurse into subagents).
   const { cwds, gitBranches } = collectCwdsAndBranches(events);

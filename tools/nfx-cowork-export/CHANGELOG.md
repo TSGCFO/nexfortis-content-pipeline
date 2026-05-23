@@ -18,6 +18,43 @@ Each released version has the following subsections (omit any that are empty):
 
 ## [Unreleased]
 
+### Tool (post-slice-6 data-contract fixes; no schemaVersion bump)
+
+Four bugs Perplexity caught reviewing Hassan's runs 1–4. All four are data-contract issues — wrong values in fields that already exist in the schema. `schemaVersion` stays at `1`.
+
+**Bug 1: `subagentSlug` contained the full source file path** (`stitch.ts:186`). Old code did `matched.file.split('/').pop()` which only handles POSIX separators. On Windows hosts, the source path uses `\` and passes through unchanged — so emitted JSONs carried strings like `"C:\\Users\\HassanSadiq\\AppData\\...\\subagents\\agent-a68b00e493569b47e"` instead of just `"agent-a68b00e493569b47e"`. Three concrete problems: Windows-specific paths embedded in cross-platform JSON; the user's Windows account name leaked into every subagent envelope; the ingester couldn't correlate by slug because the path isn't a stable identifier. Fix normalizes backslashes to forward slashes before splitting, matching the pattern already used by `workspaceIdFromPath`.
+
+**Bug 2: `continuationGroupId` was per-transcript instead of per-chain** (`run-discovery.ts` + `continuation.ts`). Old behavior computed each transcript's groupId from its OWN first user message after scaffold strip. The 3 continuations of `cool-great-franklin` happened to share a hash (their first messages were all `"done"` after scaffold strip — Hassan's brief replies), but the original had a different first message and therefore a different hash — splitting one conversation arc into "1 + 3" downstream. The fix changes the spec: continuations now share ONE groupId derived from the ORIGINAL transcript's first user message, and the original itself carries no groupId. The "original" is identified by `scaffoldStripped === false`. Extracted the assignment logic into a pure helper `assignContinuationGroupIds(transcripts, slug)` in `continuation.ts` for testability.
+
+**Bug 3a: `lastActivityAt` and `createdAt` silently dropped when source meta stored them as numbers.** Cowork's meta JSON stores both as epoch-ms numbers (e.g. `1776112559346`), not as ISO strings. The old `extractSessionMeta` in `discovery.ts:243` only assigned values when `typeof v === 'string'`, so the numbers fell through unhandled and the fields were absent on every emitted JSON. Fix adds an `assignTimestamp(key, v)` helper that accepts both strings and finite numbers and converts numbers to ISO UTC ms via `new Date(v).toISOString()`.
+
+**Bug 3b: `mcpServers` never populated.** Cowork stores remote MCP config under `remoteMcpServersConfig` as an array of `{ uuid, name, tools: [...] }` objects. The old extractor didn't read this field at all. Fix extracts the `name` field from each entry and surfaces them as `meta.mcpServers: string[]`, which `buildSessionDocument` then maps to the schema's `mcpServers: z.array(z.string()).optional()` field. Defensive about malformed entries (missing name, non-object, empty string) — those are skipped.
+
+**Bug 4: `title` absence is intentional behavior.** Cowork generates titles asynchronously after a session is created. Newly-created sessions with no AI-generated title yet legitimately have no `title` field in their source meta JSON. The current `buildSessionDocument` already handles this correctly — `if (meta?.title !== undefined) doc.title = meta.title;` — so the field is emitted only when the source has it. Added an inline comment explaining the optional behavior so future maintainers understand. The PR description includes a PowerShell one-liner for Hassan to run on his actual untitled sessions to confirm the source meta has no title field. If any of them DO have a title in source and weren't surfaced, that's a real parser miss and we'd open a follow-up.
+
+### Real-data verification (May 11 backup, full run)
+
+| Metric | Before | After |
+|---|---|---|
+| `subagentSlug` containing path/username | 9 envelopes | **0** |
+| `cool-great-franklin` chain groupId | 3-1 split | **3 share `sha256:8e60b32c…`, original has no groupId** |
+| Files with `lastActivityAt` | 0/35 | **35/35** |
+| Files with `mcpServers` | 0/35 | **35/35** (sample: `['composio', 'Gmail', 'Google Calendar']`) |
+| Files with `title` (informational) | 29/35 | 29/35 (unchanged — see Bug 4) |
+| Validation failures | 0 | 0 |
+
+### Tests added (+19 → workspace total 402)
+
+- `tests/cowork-export/stitch.test.ts` (+3): POSIX path, Windows backslash path (Bug 1 reproducer with username-leak check), mixed-separator path.
+- `tests/cowork-export/continuation.test.ts` (+9): formula stability + v1 prefix lock + chain-level rule (3 continuations share one hash, original has no hash, empty-slug graceful, no-first-msg graceful, preset-value preservation).
+- `tests/cowork-export/discovery.test.ts` (+7): number-format timestamps for createdAt/lastActivityAt, string format back-compat, malformed timestamp drop, `mcpServers` from `remoteMcpServersConfig`, absent handling, empty-array handling, malformed-entry skipping.
+
+### Schema (unchanged from slice 1.5)
+
+No emitted-JSON shape changes. `schemaVersion` stays at `1`. The four fields touched (`subagentSlug`, `continuationGroupId`, `lastActivityAt`, `mcpServers`) all existed in the schema already; this PR fixes their values, not their existence.
+
+---
+
 ### Tool (post-slice-6 fix: remove account-allowlist filter; no schemaVersion bump)
 
 The `account-allowlist.json` config file and the `--account-allowlist` flag are removed. The session-level filter no longer drops sessions based on `meta.emailAddress`.
