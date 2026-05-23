@@ -73,9 +73,12 @@ The example files in this directory document the shape of each. The exporter shi
 nfx-cowork-export
   --input <cowork-data-dir>          [default: %APPDATA%\Claude\local-agent-mode-sessions on Windows]
   --output <dir>                      [default: data/imports/claude-cowork/]
-  --cwd-allowlist <path>              [default: ~/.config/nfx-cowork-export/cwd-allowlist.json]
-  --family-law-blocklist <path>       [default: ~/.config/nfx-cowork-export/family-law-slugs.json]
-  --account-allowlist <path>          [default: ~/.config/nfx-cowork-export/account-allowlist.json]
+  --cwd-allowlist <path>              [default: ~/.config/nfx-cowork-export/cwd-allowlist.json on Linux/macOS;
+                                       %APPDATA%\nfx-cowork-export\cwd-allowlist.json on Windows]
+  --family-law-blocklist <path>       [default: ~/.config/nfx-cowork-export/family-law-slugs.json on Linux/macOS;
+                                       %APPDATA%\nfx-cowork-export\family-law-slugs.json on Windows]
+  --account-allowlist <path>          [default: ~/.config/nfx-cowork-export/account-allowlist.json on Linux/macOS;
+                                       %APPDATA%\nfx-cowork-export\account-allowlist.json on Windows]
   --dry-run                           [parse, filter, validate, write nothing]
   --verbose                           [per-session decisions to stdout]
   --validate-output <path>            [validate an existing emitted JSON file against the schema; standalone mode]
@@ -168,8 +171,7 @@ The binary takes the same flags as the Node CLI documented above:
 ./nfx-cowork-export-linux-x64 --input /path/to/cowork --output ./out
 
 # Windows (PowerShell)
-.
-fx-cowork-export-windows-x64.exe --input "$env:APPDATA\Claude\local-agent-mode-sessions" --output .\out
+.\nfx-cowork-export-windows-x64.exe --input "$env:APPDATA\Claude\local-agent-mode-sessions" --output .\out
 ```
 
 ### Install-from-source fallback
@@ -196,4 +198,6 @@ This tool never writes back to Cowork's data folders. All output goes to the con
 pnpm test   # runs the workspace-wide vitest suite, including this package
 ```
 
-Tests live at the repo root under `tests/cowork-export/` per the workspace convention. Slice 1 tests cover schema acceptance/rejection across all event kinds and the validator's success/failure paths. Real-data round-trip tests come in slice 2+.
+Tests live at the repo root under `tests/cowork-export/` per the workspace convention. The slice 1–6 suite covers: schema acceptance/rejection across all event kinds (slice 1), discovery + session-level filter (slice 2), per-event filter + tool-call summary extractors + post-check (slice 3), subagent stitching + auto-continuation handling (slice 4), PII redaction with the post-redaction 80-char clamp + JSON emission + atomic-write + CLI defaults (slice 5), and the shared utils helpers + env-parameterized CLI defaults (slice 6). 375 tests as of slice 6.
+
+Real-data sanity checks run against Hassan's actual Cowork backup are documented in the slice 5 and slice 6 CHANGELOG entries — those are not part of the automated test suite (they require a local Cowork data folder) but the result counts (files written, validation failures, PII redactions) are recorded so future changes can be checked against them.
