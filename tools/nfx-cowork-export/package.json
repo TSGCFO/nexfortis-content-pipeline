@@ -19,7 +19,6 @@
     "dist",
     "cwd-allowlist.example.json",
     "family-law-slugs.example.json",
-    "account-allowlist.example.json",
     "README.md",
     "CHANGELOG.md"
   ],

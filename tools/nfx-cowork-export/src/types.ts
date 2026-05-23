@@ -62,7 +62,6 @@ export type SessionDropReason =
   | 'scheduled_task'                      // initialMessage starts with `<scheduled-task`
   | 'command_message'                     // initialMessage starts with `<command-message`
   | 'system_path_cwd'                     // initialMessage starts with `<system-path-cwd`
-  | 'account_not_allowlisted'             // emailAddress not in account allowlist
   | 'cwd_always_denied'                   // initial cwd starts with an `alwaysDeny` prefix
   | 'cwd_not_allowed'                     // initial cwd doesn't match any allow prefix and isn't sandbox
   | 'meta_missing'                        // no meta JSON sidecar — cannot filter safely
@@ -77,7 +76,6 @@ export interface ExporterConfig {
     alwaysDeny: readonly string[];
   };
   familyLawSlugs: readonly string[];
-  accountAllowlist: readonly string[];
 }
 
 export interface AuditRow {

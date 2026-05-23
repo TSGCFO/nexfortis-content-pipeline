@@ -44,7 +44,6 @@ const ALL_DROP_REASONS: readonly SessionDropReason[] = [
   'scheduled_task',
   'command_message',
   'system_path_cwd',
-  'account_not_allowlisted',
   'cwd_always_denied',
   'cwd_not_allowed',
   'meta_missing',

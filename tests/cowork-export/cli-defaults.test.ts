@@ -14,12 +14,9 @@ describe('computeCliDefaults', () => {
     const d = computeCliDefaults({});
     const dir1 = path.dirname(d.cwdAllowlist);
     const dir2 = path.dirname(d.familyLawBlocklist);
-    const dir3 = path.dirname(d.accountAllowlist);
     expect(dir1).toBe(dir2);
-    expect(dir2).toBe(dir3);
     expect(path.basename(d.cwdAllowlist)).toBe('cwd-allowlist.json');
     expect(path.basename(d.familyLawBlocklist)).toBe('family-law-slugs.json');
-    expect(path.basename(d.accountAllowlist)).toBe('account-allowlist.json');
   });
 
   it('config dir on Linux/macOS uses ~/.config/nfx-cowork-export/', () => {

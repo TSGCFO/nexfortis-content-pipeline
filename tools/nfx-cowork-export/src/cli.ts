@@ -11,7 +11,6 @@
  *   --cwd-allowlist <path>            default: ~/.config/nfx-cowork-export/cwd-allowlist.json
  *                                      (or %APPDATA%\nfx-cowork-export\ on Windows)
  *   --family-law-blocklist <path>     default: same dir, family-law-slugs.json
- *   --account-allowlist <path>        default: same dir, account-allowlist.json
  *   --dry-run                         parse + filter + redact + validate, write nothing
  *   --verbose                         (reserved for slice 6; currently a no-op)
  *   --validate-output <path>          standalone validator mode: validate the given JSON
@@ -57,7 +56,6 @@ program
   .option('--output <dir>', 'Output directory for emitted JSON', defaults.outputDir)
   .option('--cwd-allowlist <path>', 'Path to cwd-allowlist.json', defaults.cwdAllowlist)
   .option('--family-law-blocklist <path>', 'Path to family-law-slugs.json', defaults.familyLawBlocklist)
-  .option('--account-allowlist <path>', 'Path to account-allowlist.json', defaults.accountAllowlist)
   .option('--dry-run', 'Parse + filter + redact + validate; write no files. Audit goes to stdout only.', false)
   .option('--verbose', '[reserved — slice 6]', false);
 
@@ -67,7 +65,6 @@ program.action(async (opts: {
   output: string;
   cwdAllowlist: string;
   familyLawBlocklist: string;
-  accountAllowlist: string;
   dryRun: boolean;
   verbose: boolean;
 }) => {
@@ -89,7 +86,6 @@ program.action(async (opts: {
     const config = await loadExporterConfig({
       cwdAllowlistPath: opts.cwdAllowlist,
       familyLawSlugsPath: opts.familyLawBlocklist,
-      accountAllowlistPath: opts.accountAllowlist,
     });
 
     const result = await runExport({

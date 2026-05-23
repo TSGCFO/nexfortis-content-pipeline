@@ -10,7 +10,10 @@
  * Files loaded:
  *   - cwd-allowlist.json     — three-bucket allow/deny path lists
  *   - family-law-slugs.json  — plaintext slugs to drop wholesale
- *   - account-allowlist.json — emails of Cowork accounts to ingest from
+ *
+ * (Removed in slice 6+: account-allowlist.json. Every session on the user's
+ * own laptop is theirs by definition. The `meta.emailAddress` field is still
+ * read and surfaced as the emitted JSON's `account` field for ingester use.)
  */
 
 import { promises as fs } from 'node:fs';
@@ -32,12 +35,6 @@ const cwdAllowlistSchema = z
 const familyLawSlugsSchema = z
   .object({
     slugs: z.array(z.string()),
-  })
-  .passthrough();
-
-const accountAllowlistSchema = z
-  .object({
-    accounts: z.array(z.string()),
   })
   .passthrough();
 
@@ -66,7 +63,6 @@ export class ConfigInvalidError extends Error {
 export interface LoadExporterConfigOptions {
   cwdAllowlistPath: string;
   familyLawSlugsPath: string;
-  accountAllowlistPath: string;
 }
 
 async function readJson(path: string, kind: string): Promise<unknown> {
@@ -105,19 +101,13 @@ function parseOrThrow<T>(schema: z.ZodType<T>, raw: unknown, path: string): T {
 export async function loadExporterConfig(
   options: LoadExporterConfigOptions
 ): Promise<ExporterConfig> {
-  const [cwdRaw, slugsRaw, accountsRaw] = await Promise.all([
+  const [cwdRaw, slugsRaw] = await Promise.all([
     readJson(options.cwdAllowlistPath, 'cwd-allowlist'),
     readJson(options.familyLawSlugsPath, 'family-law-slugs'),
-    readJson(options.accountAllowlistPath, 'account-allowlist'),
   ]);
 
   const cwd = parseOrThrow(cwdAllowlistSchema, cwdRaw, options.cwdAllowlistPath);
   const slugs = parseOrThrow(familyLawSlugsSchema, slugsRaw, options.familyLawSlugsPath);
-  const accounts = parseOrThrow(
-    accountAllowlistSchema,
-    accountsRaw,
-    options.accountAllowlistPath
-  );
 
   return {
     cwdAllowlist: {
@@ -126,6 +116,5 @@ export async function loadExporterConfig(
       alwaysDeny: cwd.alwaysDeny,
     },
     familyLawSlugs: slugs.slugs,
-    accountAllowlist: accounts.accounts,
   };
 }

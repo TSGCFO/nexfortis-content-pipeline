@@ -15,7 +15,7 @@
  *   --output
  *     All:     ./data/imports/claude-cowork
  *
- *   --cwd-allowlist / --family-law-blocklist / --account-allowlist
+ *   --cwd-allowlist / --family-law-blocklist
  *     Windows: %APPDATA%\nfx-cowork-export\<filename>.json
  *     other:   ~/.config/nfx-cowork-export/<filename>.json
  *
@@ -63,7 +63,6 @@ export interface CliDefaults {
   outputDir: string;
   cwdAllowlist: string;
   familyLawBlocklist: string;
-  accountAllowlist: string;
 }
 
 export function computeCliDefaults(env: NodeJS.ProcessEnv = process.env): CliDefaults {
@@ -89,6 +88,5 @@ export function computeCliDefaults(env: NodeJS.ProcessEnv = process.env): CliDef
     outputDir: path.join(process.cwd(), 'data', 'imports', 'claude-cowork'),
     cwdAllowlist: path.join(userConf, 'cwd-allowlist.json'),
     familyLawBlocklist: path.join(userConf, 'family-law-slugs.json'),
-    accountAllowlist: path.join(userConf, 'account-allowlist.json'),
   };
 }
