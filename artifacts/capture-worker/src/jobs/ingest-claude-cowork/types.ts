@@ -21,6 +21,16 @@ export interface DiscoveredFile {
 }
 
 /**
+ * Serializable shape used as the return type of `step.run('discover-files')`.
+ * Inngest JSON-serializes step return values, so we send `mtime` as an ISO
+ * string and re-hydrate to a `Date` on the receiving side.
+ */
+export interface SerializableDiscoveredFile {
+  path: string;
+  mtime: string;
+}
+
+/**
  * One event after flattening the recursive subagent tree.
  *
  * Subagent envelopes themselves do NOT appear in the flat stream — only

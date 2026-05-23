@@ -34,6 +34,13 @@ import {
 } from './errors.js';
 import type { SessionDocument } from './types.js';
 
+/**
+ * Maximum number of zod issue paths to carry forward in
+ * `SchemaValidationError.issues`. The full list is rarely useful for triage;
+ * the first few issues are almost always what the operator needs to fix the
+ * upstream file. This is an internal cap — not part of the package's public
+ * API.
+ */
 const MAX_ISSUE_DEPTH = 5;
 
 export async function readAndValidate(

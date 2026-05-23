@@ -44,7 +44,11 @@ import {
 } from './errors.js';
 import { processSession } from './process.js';
 import { readAndValidate } from './read-and-validate.js';
-import type { DiscoveredFile, RunSummary } from './types.js';
+import type {
+  DiscoveredFile,
+  RunSummary,
+  SerializableDiscoveredFile,
+} from './types.js';
 
 const SOURCE = 'claude_cowork' as const;
 const SEVEN_DAYS_MS = 7 * 24 * 60 * 60 * 1000;
@@ -176,22 +180,22 @@ export function createIngestClaudeCoworkCron(
       });
       const since = new Date(sinceISO);
 
-      const discovered: DiscoveredFile[] = await step.run(
+      // Inngest JSON-serializes step return values, so the callback returns
+      // `SerializableDiscoveredFile[]` (mtime as ISO string) and we re-hydrate
+      // to `DiscoveredFile[]` (mtime as Date) on this side.
+      const discovered: SerializableDiscoveredFile[] = await step.run(
         'discover-files',
-        async () => {
-          const files = await discoverFiles(env.importDir, since);
-          return files.map((f) => ({
+        async (): Promise<SerializableDiscoveredFile[]> => {
+          const found = await discoverFiles(env.importDir, since);
+          return found.map((f) => ({
             path: f.path,
-            // step.run serializes via JSON; convert Date → ISO string and
-            // back on the other side.
-            mtime: f.mtime.toISOString() as unknown as Date,
+            mtime: f.mtime.toISOString(),
           }));
         },
       );
-      // Re-hydrate Date objects after step.run JSON serialization round-trip.
       const files: DiscoveredFile[] = discovered.map((f) => ({
         path: f.path,
-        mtime: new Date(f.mtime as unknown as string),
+        mtime: new Date(f.mtime),
       }));
 
       const summary: RunSummary = {
@@ -301,15 +305,97 @@ export function createIngestClaudeCoworkCron(
 }
 
 /**
- * Discriminated outcome for one file. Used by `index.ts` to update the
+ * Discriminated outcome for one file. Used by the orchestrator to update the
  * `RunSummary` without losing typing.
+ *
+ * EXHAUSTIVENESS CONTRACT — when adding a new error class to `./errors.ts`:
+ *   1. Add a new variant here on `FileOutcome` (and to
+ *      `ClassifiedFileOutcome` below if it's a known-error class).
+ *   2. Add a matching branch inside `classifyFileError` (compile error if
+ *      `ClassifiedFileOutcome` grows but the helper doesn't return the new
+ *      `kind`).
+ *   3. Add a matching `case` to the switch on `result.kind` inside
+ *      `createIngestClaudeCoworkCron`'s per-file loop so the new outcome
+ *      gets its own `RunSummary` counter.
+ *
+ * Skipping any of (2) or (3) silently routes the new error to the
+ * `unexpected` catch-all and the run summary's `errors` counter absorbs it
+ * without distinct accounting.
  */
 type FileOutcome =
   | { kind: 'session'; result: Awaited<ReturnType<typeof processSession>> }
+  | ClassifiedFileOutcome
+  | { kind: 'unexpected'; reason: string };
+
+/**
+ * Subset of `FileOutcome` produced by `classifyFileError` — the known-error
+ * classes that have their own dedicated `RunSummary` counter. Excludes
+ * `session` (success path) and `unexpected` (catch-all).
+ */
+type ClassifiedFileOutcome =
   | { kind: 'schema_version_mismatch'; actualVersion: unknown }
   | { kind: 'schema_validation'; issueCount: number }
-  | { kind: 'file_read'; reason: string }
-  | { kind: 'unexpected'; reason: string };
+  | { kind: 'file_read'; reason: string };
+
+/**
+ * Map a thrown value to a `ClassifiedFileOutcome` if it is one of the known
+ * error classes from `./errors.ts`, else `null`. Logs a structured
+ * `file_failed` line for every classified error. Never throws.
+ *
+ * The narrow return type of `ClassifiedFileOutcome | null` (rather than
+ * `FileOutcome | null`) is the compile-time guard: if a new known-error
+ * variant is added to `ClassifiedFileOutcome`, this helper must grow a new
+ * branch to keep the return type satisfiable.
+ */
+function classifyFileError(
+  err: unknown,
+  base: string,
+  logger: ReturnType<typeof createLogger>,
+): ClassifiedFileOutcome | null {
+  if (err instanceof SchemaVersionMismatchError) {
+    logger.error(
+      {
+        source: 'capture-worker',
+        action: 'file_failed',
+        code: err.code,
+        file: base,
+        actualVersion: String(err.actualVersion),
+        expectedVersion: err.expectedVersion,
+      },
+      'cowork file refused: schemaVersion mismatch',
+    );
+    return {
+      kind: 'schema_version_mismatch',
+      actualVersion: err.actualVersion,
+    };
+  }
+  if (err instanceof SchemaValidationError) {
+    logger.error(
+      {
+        source: 'capture-worker',
+        action: 'file_failed',
+        code: err.code,
+        file: base,
+        issues: err.issues.map((i) => `${i.path}: ${i.message}`),
+      },
+      'cowork file refused: schema validation failed',
+    );
+    return { kind: 'schema_validation', issueCount: err.issues.length };
+  }
+  if (err instanceof FileReadError) {
+    logger.error(
+      {
+        source: 'capture-worker',
+        action: 'file_failed',
+        code: err.code,
+        file: base,
+      },
+      `cowork file refused: ${err.message}`,
+    );
+    return { kind: 'file_read', reason: err.message };
+  }
+  return null;
+}
 
 async function processOneFile(
   file: DiscoveredFile,
@@ -332,45 +418,12 @@ async function processOneFile(
     });
     return { kind: 'session', result };
   } catch (err) {
-    if (err instanceof SchemaVersionMismatchError) {
-      logger.error(
-        {
-          source: 'capture-worker',
-          action: 'file_failed',
-          code: err.code,
-          file: base,
-          actualVersion: String(err.actualVersion),
-          expectedVersion: err.expectedVersion,
-        },
-        'cowork file refused: schemaVersion mismatch',
-      );
-      return { kind: 'schema_version_mismatch', actualVersion: err.actualVersion };
-    }
-    if (err instanceof SchemaValidationError) {
-      logger.error(
-        {
-          source: 'capture-worker',
-          action: 'file_failed',
-          code: err.code,
-          file: base,
-          issues: err.issues.map((i) => `${i.path}: ${i.message}`),
-        },
-        'cowork file refused: schema validation failed',
-      );
-      return { kind: 'schema_validation', issueCount: err.issues.length };
-    }
-    if (err instanceof FileReadError) {
-      logger.error(
-        {
-          source: 'capture-worker',
-          action: 'file_failed',
-          code: err.code,
-          file: base,
-        },
-        `cowork file refused: ${err.message}`,
-      );
-      return { kind: 'file_read', reason: err.message };
-    }
+    const classified = classifyFileError(err, base, logger);
+    if (classified !== null) return classified;
+
+    // Catch-all for truly unexpected errors. Logged here so it doesn't get
+    // lost — and see the EXHAUSTIVENESS CONTRACT on `FileOutcome` above
+    // before adding a new error class.
     const message = err instanceof Error ? err.message : String(err);
     logger.error(
       {
