@@ -44,6 +44,9 @@ importers:
       '@microsoft/microsoft-graph-client':
         specifier: ^3.0.7
         version: 3.0.7
+      '@ncp/cowork-export':
+        specifier: workspace:*
+        version: link:../../tools/nfx-cowork-export
       '@ncp/db':
         specifier: workspace:*
         version: link:../../lib/db

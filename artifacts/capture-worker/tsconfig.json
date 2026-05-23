@@ -9,6 +9,7 @@
     { "path": "../../lib/logger" },
     { "path": "../../lib/db" },
     { "path": "../../lib/embeddings" },
-    { "path": "../../lib/redaction" }
+    { "path": "../../lib/redaction" },
+    { "path": "../../tools/nfx-cowork-export" }
   ]
 }

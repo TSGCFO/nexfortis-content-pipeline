@@ -17,6 +17,7 @@
   },
   "dependencies": {
     "@microsoft/microsoft-graph-client": "^3.0.7",
+    "@ncp/cowork-export": "workspace:*",
     "@ncp/db": "workspace:*",
     "@ncp/embeddings": "workspace:*",
     "@ncp/logger": "workspace:*",
