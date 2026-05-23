@@ -46,7 +46,7 @@ const program = new Command();
 program
   .name('nfx-cowork-export')
   .description('Local CLI that reads Cowork on-disk session data and emits normalized JSON for the NexFortis content pipeline ingester.')
-  .version('0.0.5');
+  .version('0.0.6');
 
 // The "validate-output" mode is a standalone validator — no other flags
 // participate. Implemented as an explicit option, not a subcommand, to keep
