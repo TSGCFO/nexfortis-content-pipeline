@@ -23,7 +23,6 @@
  * `checkpoint.ts` file — staying strictly inside the allowlist.
  */
 
-import { promises as fs } from 'node:fs';
 import path from 'node:path';
 import type { Inngest, InngestFunction } from 'inngest';
 
