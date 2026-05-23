@@ -77,9 +77,14 @@ export function renderExtendedAuditReport(inputs: ExtendedAuditInputs): string {
     lines.push('');
   }
 
-  // Per-source-branch counts (workspaceId)
+  // Per-source-branch counts (workspaceId). Iterates over parsedSessions but
+  // filters by postCheck.keep so this count matches the "Kept (passed filters)"
+  // headline number. Sessions that failed post-check (tiny_session,
+  // cwd_majority_outside_allowlist) are still in parsedSessions for audit-
+  // table rendering but must not be counted here.
   const branchCounts = new Map<string, number>();
   for (const s of inputs.parsedSessions) {
+    if (!s.postCheck.keep) continue;
     const ws = workspaceIdFromPath(s.discovery.sessionFolder) ?? '<unknown>';
     branchCounts.set(ws, (branchCounts.get(ws) ?? 0) + 1);
   }
@@ -92,9 +97,10 @@ export function renderExtendedAuditReport(inputs: ExtendedAuditInputs): string {
     lines.push('');
   }
 
-  // Per-account counts
+  // Per-account counts. Same postCheck.keep filter as above for the same reason.
   const accountCounts = new Map<string, number>();
   for (const s of inputs.parsedSessions) {
+    if (!s.postCheck.keep) continue;
     const acct = s.discovery.meta?.emailAddress ?? '<no-account-in-meta>';
     accountCounts.set(acct, (accountCounts.get(acct) ?? 0) + 1);
   }
