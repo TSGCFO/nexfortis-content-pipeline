@@ -100,3 +100,37 @@ export {
   type RunDiscoveryOptions,
   type RunDiscoveryResult,
 } from "./run-discovery.js";
+
+// Slice 5 — redaction, emission, extended audit, OS defaults, full orchestrator
+export {
+  redactEventTree,
+  type RedactionSummary,
+  type RedactEventsResult,
+} from './redact-events.js';
+
+export {
+  emitParsedSessions,
+  buildSessionDocument,
+  EXPORTER_NAME,
+  EXPORTER_VERSION,
+  SOURCE_FORMAT,
+  type EmitOptions,
+  type EmitResult,
+} from './emit.js';
+
+export {
+  computeCliDefaults,
+  type CliDefaults,
+} from './cli-defaults.js';
+
+export {
+  renderExtendedAuditReport,
+  writeAuditSidecar,
+  type ExtendedAuditInputs,
+} from './audit-extended.js';
+
+export {
+  runExport,
+  type RunExportOptions,
+  type RunExportResult,
+} from './run-export.js';

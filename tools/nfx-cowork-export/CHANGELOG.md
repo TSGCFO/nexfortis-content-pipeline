@@ -18,6 +18,47 @@ Each released version has the following subsections (omit any that are empty):
 
 ## [Unreleased]
 
+### Tool (slice 5 — PII redaction + JSON emission + audit sidecar + OS defaults; no schemaVersion bump)
+
+The exporter now writes JSON to disk. Slice 5 is the first slice where files actually leave the laptop into the pipeline's import directory. Everything before this slice was discovery + filter + parse + stitch in-memory only.
+
+- **`src/redact-events.ts`** — runs the existing `lib/redaction` regex pass (email / phone / cc / ipv4 / ipv6) across the event tree returned by slice 4. Recurses into `subagent` events. Pure (no mutation of input). Returns a new event tree plus a `RedactionSummary` of replacements by type. This is **defense in depth**: the ingester does its own redaction pass, but doing it here means PII never leaves the laptop in plaintext on disk.
+- **Post-redaction 80-char clamp on `tool_call.summary`.** `[REDACTED_EMAIL]` is 16 chars and may replace a shorter email — that can push a summary string past the schema's 80-char cap. The redactor re-clamps to 80 chars after substitution to preserve the invariant. Real-data run before this fix produced 2 validation failures; after this fix, 0.
+- **`src/emit.ts`** — `emitParsedSessions(sessions, outputDir)` walks each parsed session, **filters on `postCheck.keep`** (honoring the slice-3 review note), builds a `SessionDocument` per surviving transcript via `buildSessionDocument()`, validates against the v1 schema, and writes atomically (`tmp` file + `rename`). Filename is `<transcriptId>.json`. Returns an `EmissionResult` with `filesWritten` / `validationFailures` / per-file diagnostics.
+- **`src/run-export.ts`** — top-level orchestrator: `runDiscovery → redactEventTree → emitParsedSessions → renderExtendedAuditReport → writeAuditSidecar`. The CLI now calls this single function in NORMAL mode and the same function with a `dryRun: true` switch.
+- **`src/audit-extended.ts`** — `renderExtendedAuditReport()` extends the slice-2 stdout audit with: per-session compression ratios, zero-event-kept sessions, per-source-branch counts, per-account counts, family-law SHA-256 hashes, parse-failure totals, redaction summary, JSON emission stats. `writeAuditSidecar(text, outputDir)` writes the full text to `<output-dir>/_audit-<ISO-timestamp>.txt` so audit history persists.
+- **`src/cli-defaults.ts`** — OS-specific config-path defaults. Windows: `%APPDATA%\Claude\local-agent-mode-sessions` for `--input` and `%APPDATA%\nfx-cowork-export\` for config files. Linux/macOS: `~/.config/nfx-cowork-export/` for config files and no default `--input` (must be supplied explicitly because the laptop layout varies). Falls back to environment-variable-aware lookups.
+- **`--validate-output <path>` flag** — standalone mode. Loads a single emitted JSON file, validates against the v1 schema, prints OK + sessionId/event-count or the schema error path, exits 0 / 5. Useful for ingester smoke tests and Hassan running ad-hoc sanity checks on a single file without re-running the full pipeline.
+- **`--dry-run` now actually works.** Parses → filters → redacts → validates → writes audit to stdout only. No files written. Useful for previewing what would happen before running for real.
+- **Exit codes locked in:** 0 = success, 1 = unhandled error, 2 = missing config, 3 = invalid config, 4 = validation failure on emitted documents (NORMAL mode — one or more files failed the schema check after redaction), 5 = `--validate-output` reported the target file invalid (or unparseable JSON in the target). The earlier draft of these notes called code 5 `no kept sessions` — that's wrong; the code/CLI doc header (`src/cli.ts`) is authoritative.
+
+### Real-data sanity check
+
+Against the full 65-session Cowork backup with a narrow account+cwd allowlist (`hassansadiq73@gmail.com` only, the three NexFortis project paths from `cwd-allowlist.example.json`):
+
+| Metric | Value |
+|---|---|
+| Sessions discovered | 61 |
+| Files written | 17 |
+| Validation failures | **0** (was 2 before the post-redaction clamp fix) |
+| Text fields scanned for PII | 1,743 |
+| Total PII replacements | 204 (143 email, 37 phone, 22 cc, 2 ipv6) |
+| Audit sidecar | written to `<output-dir>/_audit-<timestamp>.txt` |
+
+A broader account allowlist (matching the multi-account variant the earlier dev run used) produces 35 files written; the count varies with the config, but the 0-validation-failure result is invariant.
+
+### Tests added (30 new — workspace total 330 → 360)
+
+- `tests/cowork-export/redact-events.test.ts` — 13 tests across email/phone/cc/ipv4/ipv6 patterns in user/assistant/tool_call events, subagent recursion (single + nested), purity, **post-redaction 80-char summary re-clamp** (regression test for the schema-cap-violation bug surfaced by the real-data run), and short-summary natural-length sanity.
+- `tests/cowork-export/emit.test.ts` — 13 tests across `buildSessionDocument()` (provenance block, sessionId pinning, optional metadata fields), `emitParsedSessions()` (postCheck.keep filtering, atomic write, validation-failure reporting), output-directory creation, idempotent reruns.
+- `tests/cowork-export/cli-defaults.test.ts` — 4 tests for Windows / Linux / macOS / unknown-platform defaults paths.
+
+### Schema (unchanged from slice 1.5)
+
+No emitted-JSON shape changes. `schemaVersion` stays at `1`.
+
+---
+
 ### Fix (slice 4 review — PR #17 follow-up; no schemaVersion bump)
 
 Addresses the critical correctness bug Perplexity caught in slice 4's stitcher. The original implementation walked stitchables in array order and matched any stitchable whose firstUserPrefix existed ANYWHERE in `agentDispatchMap` — silently swapping subagents between dispatches when filesystem ordering of subagent files didn't match the order of `Agent` dispatches in the parent. The `beautiful-blissful-volta` brand-kit session (5 Agent dispatches) was the highest-risk real-data session.

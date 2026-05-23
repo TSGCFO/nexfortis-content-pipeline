@@ -1,4 +1,6 @@
 export { redact } from './redact.js';
+export { regexPass } from './regex-pass.js';
+export type { RegexPassResult, RegexReplacement } from './regex-pass.js';
 export {
   checkBlocklist,
   assertNotBlocked,
