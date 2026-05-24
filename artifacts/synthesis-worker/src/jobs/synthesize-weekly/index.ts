@@ -9,20 +9,30 @@
  *      embedding IS NOT NULL).
  *   2. Cluster by naive O(n^2) cosine similarity > 0.72; drop clusters
  *      smaller than 3 members.
- *   3. Label each surviving cluster via Claude Sonnet (one step.run each).
- *   4. Classify each label into a pillar via Claude Haiku (one step.run each).
+ *   3. Label each surviving cluster via Claude Sonnet.
+ *   4. Classify each label into a pillar via Claude Haiku.
  *   5. Score and rank in-pillar clusters; pick the top one.
  *   6. Generate the top cluster's proposed title via Claude Sonnet.
  *   7. Persist all clusters (active + discarded audit rows) and the candidate.
  *   8. Dispatch `interview.session.requested` with `{ candidateId }`.
  *   9. Send Hassan a Telegram preview.
  *
- * Discrete operations are wrapped in `step.run` for retry granularity, matching
- * `artifacts/capture-worker/src/jobs/ingest-msgraph-email/index.ts`. Note:
- * `step.sendEvent` is itself a step primitive and cannot nest inside `step.run`,
- * so the dispatch is performed at the function top level immediately after the
- * `persist` step. Both are independently durable / retryable under Inngest's
- * normal step semantics.
+ * Step granularity: unlike `ingest-msgraph-email/index.ts` (which wraps each
+ * discrete operation — token fetch, per-message processing, checkpoint
+ * update — in its own `step.run` for fine-grained retries across an
+ * unbounded message stream), this cron runs the entire pipeline inside one
+ * `step.run('run-synthesize-weekly', …)` block. The job is weekly, the
+ * working set is bounded (≤ 5,000 signals; hard cap enforced in cluster.ts),
+ * and the per-LLM-call retry logic already lives inside the labeler /
+ * classifier helpers. A failure during the run therefore re-executes the
+ * whole pipeline on Inngest's next retry, which is acceptable for a
+ * once-a-week cadence.
+ *
+ * Event dispatch: `step.sendEvent` cannot nest inside `step.run`, so the
+ * `interview.session.requested` dispatch happens at the function top level
+ * immediately after the run step returns on success. Both step.run and
+ * step.sendEvent are independently durable under Inngest's standard
+ * semantics.
  */
 
 import Anthropic from '@anthropic-ai/sdk';
@@ -38,8 +48,6 @@ import {
   type SynthesisClusterInsert,
 } from '@ncp/db';
 import { createLogger, type Logger } from '@ncp/logger';
-import type { Pillar } from '@ncp/shared-types';
-
 import { clusterSignals } from './cluster.js';
 import { classifyPillar } from './classify-pillar.js';
 import { EnvNotConfiguredError } from './errors.js';
@@ -566,7 +574,7 @@ export async function runSynthesizeWeekly(
     chatId: env.telegramChatId,
     message: buildPreviewMessage({
       title: proposedTitle,
-      pillar: top.pillar as Pillar,
+      pillar: top.pillar,
       signalCount: top.signalIds.length,
     }),
     fetchFn,
