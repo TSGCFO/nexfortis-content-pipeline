@@ -76,7 +76,7 @@ interface SynthesisEnv {
   telegramChatId: string;
 }
 
-function readEnv(): SynthesisEnv {
+export function readEnv(): SynthesisEnv {
   const databaseUrl = process.env['DATABASE_URL'];
   const anthropicApiKey = process.env['ANTHROPIC_API_KEY'];
   const telegramBotToken = process.env['TELEGRAM_BOT_TOKEN'];
