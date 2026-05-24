@@ -10,7 +10,7 @@ import {
   timestamp,
   uuid,
 } from 'drizzle-orm/pg-core';
-import { vector } from './_vector.js';
+import { halfvec } from './_vector.js';
 
 export const piiStatusEnum = pgEnum('pii_status_enum', [
   'clean',
@@ -39,7 +39,7 @@ export const captureSignals = pgTable(
       .defaultNow(),
     rawText: text('raw_text'),
     redactedText: text('redacted_text').notNull(),
-    embedding: vector('embedding', 3072),
+    embedding: halfvec('embedding', 3072),
     tokenCount: integer('token_count'),
     language: text('language').default('en'),
     topicTags: text('topic_tags').array(),
@@ -62,7 +62,10 @@ export const captureSignals = pgTable(
       .where(sql`${table.isDeleted} = FALSE`),
     // NOTE: The HNSW pgvector index `idx_capture_signals_embedding` is created
     // via raw SQL in src/migrations/0000_initial.sql because the
-    // `USING hnsw (... vector_cosine_ops) WITH (m = 16, ef_construction = 64)`
+    // `USING hnsw (... halfvec_cosine_ops) WITH (m = 16, ef_construction = 64)`
     // form is not cleanly expressible through Drizzle's index DSL in v0.36.
+    // The column is `halfvec(3072)` (not `vector(3072)`) because pgvector
+    // caps HNSW indexes on the full `vector` type at 2000 dimensions —
+    // `halfvec` supports up to 4000 dims at the cost of <0.5% recall.
   }),
 );

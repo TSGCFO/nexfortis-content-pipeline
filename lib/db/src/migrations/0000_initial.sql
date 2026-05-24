@@ -10,9 +10,13 @@
 -- Extensions
 -- -----------------------------------------------------------------------------
 
--- Required for the `vector(3072)` column on capture_signals and the HNSW
--- index. The Supabase project must have superuser access to enable this
--- (Dashboard → Database → Extensions).
+-- Required for the `halfvec(3072)` column on capture_signals and the HNSW
+-- index. We use `halfvec` (16-bit float per component) instead of full
+-- `vector` because pgvector caps HNSW indexes on the full `vector` type at
+-- 2000 dimensions; `halfvec` supports up to 4000 dims at the cost of <0.5%
+-- recall. The Supabase project must have superuser access to enable this
+-- (Dashboard → Database → Extensions). `halfvec` ships in the same
+-- `vector` extension (pgvector ≥ 0.7), so only one CREATE EXTENSION needed.
 CREATE EXTENSION IF NOT EXISTS vector;
 
 -- -----------------------------------------------------------------------------
@@ -70,7 +74,7 @@ CREATE TABLE capture_signals (
   ingested_at     TIMESTAMPTZ NOT NULL DEFAULT now(),
   raw_text        TEXT,
   redacted_text   TEXT NOT NULL,
-  embedding       VECTOR(3072),
+  embedding       HALFVEC(3072),
   token_count     INTEGER,
   language        TEXT DEFAULT 'en',
   topic_tags      TEXT[],
@@ -86,8 +90,10 @@ CREATE INDEX idx_capture_signals_is_deleted ON capture_signals(is_deleted) WHERE
 
 -- HNSW pgvector index — see §6. Kept as raw SQL because Drizzle's index DSL
 -- in v0.36 cannot express `WITH (m = 16, ef_construction = 64)` cleanly.
+-- Uses `halfvec_cosine_ops` (not `vector_cosine_ops`) because the column
+-- type is `halfvec(3072)`; pgvector caps HNSW on full `vector` at 2000 dims.
 CREATE INDEX idx_capture_signals_embedding ON capture_signals
-  USING hnsw (embedding vector_cosine_ops)
+  USING hnsw (embedding halfvec_cosine_ops)
   WITH (m = 16, ef_construction = 64);
 
 -- -----------------------------------------------------------------------------
