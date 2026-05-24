@@ -14,5 +14,14 @@
   "scripts": {
     "build": "tsc --build",
     "typecheck": "tsc --build"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.28.0",
+    "@ncp/db": "workspace:*",
+    "@ncp/logger": "workspace:*",
+    "@ncp/shared-types": "workspace:*",
+    "drizzle-orm": "^0.36.0",
+    "inngest": "^3.22.0",
+    "zod": "^3.23.0"
   }
 }
