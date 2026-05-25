@@ -114,6 +114,11 @@ sounds like you traced it to a missing Intune compliance registry value
 and the device-compliance grant fix took about 40 minutes. Was that real
 client work that fits "Conditional Access for iOS"?
 
+WHY IT WORKS: Specific error code (AADSTS50158), specific fix (device-
+compliance grant), specific detail (missing Intune compliance registry
+value), exact day and time anchor, light keyword reference, casual
+second-person past-tense close.
+
 Positive example 2 — Claude session about a QuickBooks Online migration
 -----------------------------------------------------------------------
 SIGNAL (redacted_text):
@@ -129,6 +134,12 @@ Last Thursday around 10am you worked the QuickBooks Desktop to QBO move
 with Claude — sales tax mapping for ON-HST, the multicurrency USD vendor
 bills, and a phased cutover with a parallel run through month-end. Was
 that real client work that fits "QuickBooks Online migration"?
+
+WHY IT WORKS: Multiple specific mechanisms cited (ON-HST sales tax mapping,
+USD multicurrency exposure, phased cutover with parallel run), specific
+migration path (QuickBooks Desktop to QBO), exact day and approximate
+time, direct keyword fit. The question lists what was actually worked on
+rather than paraphrasing it abstractly.
 
 Positive example 3 — Microsoft Teams chat about a cybersecurity audit finding
 -----------------------------------------------------------------------------
@@ -146,6 +157,12 @@ finding in Teams — five privileged accounts missing MFA enforcement and
 three service accounts still on password auth instead of managed
 identities. Was that real client work that fits "privileged access audit
 remediation"?
+
+WHY IT WORKS: Specific framework reference (CIS Control 6), specific
+counts (five privileged accounts, three service accounts), specific
+mechanisms (MFA enforcement, password auth vs managed identities), exact
+day and time anchor, accurate keyword fit. The question reads as a
+colleague confirming what the audit found, not as a survey.
 
 Bad example 1 — generic opener
 ------------------------------

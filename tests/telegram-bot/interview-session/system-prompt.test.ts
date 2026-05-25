@@ -40,7 +40,7 @@ describe('SYSTEM_PROMPT — structural contract', () => {
     expect(matches.length).toBeGreaterThanOrEqual(3);
   });
 
-  it('every positive example block contains both a SIGNAL and a GOOD QUESTION', () => {
+  it('every positive example block contains a SIGNAL, a GOOD QUESTION, and a WHY IT WORKS rationale', () => {
     const blocks = SYSTEM_PROMPT.split(/Positive example \d[^\n]*\n-+/).slice(1);
     expect(blocks.length).toBeGreaterThanOrEqual(3);
     for (const block of blocks) {
@@ -49,7 +49,20 @@ describe('SYSTEM_PROMPT — structural contract', () => {
       const section = block.split(/\n[A-Z][^\n]*\n-+\n/)[0] ?? block;
       expect(section).toMatch(/SIGNAL[^\n]*:/);
       expect(section).toMatch(/GOOD QUESTION:/);
+      // WHY IT WORKS rationales teach the model what to optimize for, not
+      // just what good looks like. Regression guard against future edits
+      // that strip them out for brevity.
+      expect(section).toMatch(/WHY IT WORKS:/);
     }
+  });
+
+  it('positive examples reference concrete specifics by name (regression guard against drift to vague prose)', () => {
+    // Spot-check that the canonical example signals retain their concrete
+    // hooks. If a future edit replaces "AADSTS50158" with "a sign-in error",
+    // this test catches it.
+    expect(SYSTEM_PROMPT).toContain('AADSTS50158');
+    expect(SYSTEM_PROMPT).toMatch(/ON-HST/);
+    expect(SYSTEM_PROMPT).toMatch(/CIS Control 6/);
   });
 
   it('positive examples cover the three source types named in the engineering brief', () => {
@@ -141,6 +154,17 @@ describe('SYSTEM_PROMPT — structural contract', () => {
     expect(lower).not.toMatch(/\bplease\b/);
     expect(lower).not.toMatch(/\bkindly\b/);
     expect(lower).not.toMatch(/\bas an ai\b/);
+    // Common chatbot tells that drift the voice toward customer-service mode.
+    expect(lower).not.toMatch(/\bi hope this helps\b/);
+    expect(lower).not.toMatch(/\bhappy to help\b/);
+    expect(lower).not.toMatch(/\blet me know if\b/);
+  });
+
+  it('is non-trivial length — engineered prompts carry the examples and CoT, not just rules', () => {
+    // PRD §6.4 was ~700 chars. The engineered prompt is several KB. If a
+    // future edit accidentally truncates the examples or removes a section,
+    // this catches it.
+    expect(SYSTEM_PROMPT.length).toBeGreaterThan(3000);
   });
 
   // ---------------------------------------------------------------------
