@@ -118,28 +118,28 @@ export const QUESTION_JSON_SCHEMA = {
     question_text: {
       type: 'string',
       description:
-        'The confirmation question to send. ≤ 80 words. References a concrete detail from the signal. Do not include the answer-choice buttons — they are added programmatically.',
+        'The confirmation question you composed for Hassan. Opens with a day/time anchor, cites at least one concrete detail copied from the signal redacted_text, references the primary_keyword lightly, and closes casually. Second person, past tense. When no_specifics is true, set this to the exact sentinel string "NO_SPECIFICS".',
     },
     signal_id: {
       type: 'string',
       description:
-        'The UUID of the capture_signals row this question references. Must match the signal id you were given.',
+        'The exact signal_id UUID from the per-signal block in the user message. Copy it verbatim — do not invent, reformat, or echo a different signal\'s id.',
     },
     evidence_phrase: {
       type: 'string',
       description:
-        'A short verbatim substring of the signal redacted_text that grounds the question. Used as a regression check that the question is anchored to actual corpus content.',
+        'A short verbatim substring of the signal redacted_text (≤120 chars) that grounds the question. Must appear in the signal text exactly as you copied it; it is used as a regression check that the question is anchored to actual corpus content rather than invented.',
     },
     detected_specifics: {
       type: 'array',
       description:
-        'List of concrete specifics referenced in question_text (error codes, day-times, technology names, etc.). MUST be a non-empty array if the question is well-formed; each entry MUST appear (case-insensitive) in the signal redacted_text. The quality gate fails the question otherwise.',
+        'The concrete identifiers you used in question_text — error codes, config names, technology names, client situations, day-time anchors. Each entry must appear (case-insensitive substring) in the signal redacted_text. Non-empty when no_specifics is false; an empty array here when no_specifics is false will fail the quality gate.',
       items: { type: 'string' },
     },
     no_specifics: {
       type: 'boolean',
       description:
-        'Set to true when the signal contains no concrete specifics worth asking about. When true, question_text may be a sentinel and detected_specifics may be empty; the orchestrator will exclude the signal.',
+        'True when the signal contains nothing concrete to confirm — too short, entirely small talk, every detail replaced by a <REDACTED:...> marker, or off-topic from the primary_keyword. When true, set question_text to "NO_SPECIFICS" and detected_specifics to []. This is a legitimate outcome; do not stretch to write a generic question to avoid it.',
     },
   },
 } as const;
