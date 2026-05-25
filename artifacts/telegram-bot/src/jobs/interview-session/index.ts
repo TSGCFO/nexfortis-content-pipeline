@@ -333,6 +333,12 @@ export async function runInterviewSession(
   }
 
   // 7. Wait for Hassan's reply (or 7-day timeout).
+  //
+  // TODO(pr3): schedule the 48-hour soft reminder (PRD §4.7, AC-F2-05).
+  // The current single-`waitForReply` collapses the 7-day timeout AND the
+  // reminder window into one call. PR 3 will replace this with either a
+  // pair of `step.sleep` + `step.waitForEvent` calls or a separate Inngest
+  // function listening for `interview.session.no_activity_48h`.
   const reply = await deps.waitForReply(sessionId, SEVEN_DAYS_MS);
 
   // 8. Resolve terminal branch.
