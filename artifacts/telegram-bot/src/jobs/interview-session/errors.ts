@@ -38,3 +38,56 @@ export class CandidateNotFoundError extends Error {
     this.candidateId = candidateId;
   }
 }
+
+/**
+ * Surface error for callers that prefer hard-fail semantics when Claude
+ * question generation fails after retries. `runConfirmationLoop` itself
+ * does NOT throw this — a failed generation excludes the signal and
+ * continues. The class is exported because the error surface is part of
+ * this module's public contract.
+ */
+export class QuestionGenerationError extends Error {
+  public readonly code = 'QUESTION_GENERATION_FAILED' as const;
+  public readonly detail: string | undefined;
+  constructor(detail?: string) {
+    super(
+      `interview-session: Claude question generation failed${detail ? ` (${detail})` : ''}`,
+    );
+    this.name = 'QuestionGenerationError';
+    this.detail = detail;
+  }
+}
+
+/**
+ * Surface error for callers that need to react when every selected signal
+ * is excluded by the quality gate. `runConfirmationLoop` itself does NOT
+ * throw this — it returns `{ kind: 'completed', confirmedCount: 0 }`.
+ */
+export class QualityGateExhaustedError extends Error {
+  public readonly code = 'QUALITY_GATE_EXHAUSTED' as const;
+  public readonly excludedCount: number;
+  constructor(excludedCount: number) {
+    super(
+      `interview-session: ${excludedCount} signals excluded by quality gate; none remain`,
+    );
+    this.name = 'QualityGateExhaustedError';
+    this.excludedCount = excludedCount;
+  }
+}
+
+/**
+ * Surface error for Whisper transcription failures. `transcribeWithWhisper`
+ * itself returns a `Result` and never throws — this class is for external
+ * callers that wrap the result with `if (!ok) throw new ...`.
+ */
+export class WhisperTranscriptionError extends Error {
+  public readonly code = 'WHISPER_TRANSCRIPTION_FAILED' as const;
+  public readonly detail: string | undefined;
+  constructor(detail?: string) {
+    super(
+      `interview-session: Whisper transcription failed${detail ? ` (${detail})` : ''}`,
+    );
+    this.name = 'WhisperTranscriptionError';
+    this.detail = detail;
+  }
+}

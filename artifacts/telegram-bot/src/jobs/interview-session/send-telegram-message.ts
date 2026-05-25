@@ -29,6 +29,14 @@ export interface SendTelegramMessageOptions {
   message: string;
   /** Injectable for tests. Defaults to the global `fetch`. */
   fetchFn?: typeof fetch;
+  /**
+   * Optional inline-keyboard rows. Forwarded verbatim into Telegram's
+   * `reply_markup.inline_keyboard`. PR 2 uses this for the three
+   * confirmation buttons; PR 1 left it unset.
+   */
+  replyMarkup?: ReadonlyArray<
+    ReadonlyArray<{ text: string; callback_data: string }>
+  >;
 }
 
 interface TelegramApiBody {
@@ -44,35 +52,41 @@ export async function sendTelegramMessage(
   const url = `https://api.telegram.org/bot${opts.token}/sendMessage`;
 
   try {
+    const requestBody: Record<string, unknown> = {
+      chat_id: opts.chatId,
+      text: opts.message,
+      parse_mode: 'HTML',
+    };
+    if (opts.replyMarkup !== undefined) {
+      requestBody['reply_markup'] = {
+        inline_keyboard: opts.replyMarkup.map((row) => [...row]),
+      };
+    }
     const response = await fetchFn(url, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        chat_id: opts.chatId,
-        text: opts.message,
-        parse_mode: 'HTML',
-      }),
+      body: JSON.stringify(requestBody),
     });
 
-    let body: TelegramApiBody | null = null;
+    let responseBody: TelegramApiBody | null = null;
     try {
-      body = (await response.json()) as TelegramApiBody;
+      responseBody = (await response.json()) as TelegramApiBody;
     } catch {
-      body = null;
+      responseBody = null;
     }
 
     if (!response.ok) {
-      const desc = body?.description ?? `HTTP ${response.status}`;
+      const desc = responseBody?.description ?? `HTTP ${response.status}`;
       return { ok: false, error: `Telegram sendMessage failed: ${desc}` };
     }
-    if (!body) {
+    if (!responseBody) {
       return {
         ok: false,
         error: 'Telegram sendMessage returned empty/unparseable body',
       };
     }
-    if (body.ok !== true) {
-      const desc = body.description ?? 'unknown';
+    if (responseBody.ok !== true) {
+      const desc = responseBody.description ?? 'unknown';
       return { ok: false, error: `Telegram returned ok=false: ${desc}` };
     }
     return { ok: true, error: undefined };

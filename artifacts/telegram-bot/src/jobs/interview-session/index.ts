@@ -53,13 +53,19 @@ import { createLogger, type Logger } from '@ncp/logger';
 import { buildPreviewMessage } from './build-preview-message.js';
 import { buildSkipAckMessage } from './build-skip-ack-message.js';
 import { buildTimeoutMessage } from './build-timeout-message.js';
+import { runConfirmationLoop } from './confirmation-loop.js';
+import type { OpusAnthropicLike } from './generate-question.js';
 import { EnvNotConfiguredError } from './errors.js';
 import { nextMondayAt8amEastern } from './next-monday-eastern.js';
 import { sendTelegramMessage } from './send-telegram-message.js';
 import type {
+  CandidateForInterview,
+  ConfirmationLoopOutcome,
   IncomingReplyEvent,
   InterviewSessionEnv,
   RunOutcome,
+  SessionContext,
+  SignalForInterview,
 } from './types.js';
 
 const SOURCE = 'telegram_bot' as const;
@@ -80,14 +86,18 @@ const TERMINAL_CANDIDATE_STATUSES: ReadonlySet<string> = new Set([
 ]);
 
 /**
- * Read and validate the env vars this slice (PR 1) actually uses. Future
- * PRs will extend this with `OPENAI_API_KEY`, `ANTHROPIC_API_KEY`,
- * `INNGEST_*`, `SUPABASE_*` as those integrations land.
+ * Read and validate the env vars the interview-session function uses.
+ *
+ * PR 2 extends PR 1's three vars with `OPENAI_API_KEY` (Whisper) and
+ * `ANTHROPIC_API_KEY` (Claude Opus 4.7 question generation). Both are
+ * required because the confirmation loop cannot proceed without them.
  */
 export function readEnv(): InterviewSessionEnv {
   const databaseUrl = process.env['DATABASE_URL'];
   const telegramBotToken = process.env['TELEGRAM_BOT_TOKEN'];
   const telegramChatId = process.env['TELEGRAM_CHAT_ID'];
+  const openaiApiKey = process.env['OPENAI_API_KEY'];
+  const anthropicApiKey = process.env['ANTHROPIC_API_KEY'];
 
   const missing: string[] = [];
   if (typeof databaseUrl !== 'string' || databaseUrl.length === 0) {
@@ -99,6 +109,12 @@ export function readEnv(): InterviewSessionEnv {
   if (typeof telegramChatId !== 'string' || telegramChatId.length === 0) {
     missing.push('TELEGRAM_CHAT_ID');
   }
+  if (typeof openaiApiKey !== 'string' || openaiApiKey.length === 0) {
+    missing.push('OPENAI_API_KEY');
+  }
+  if (typeof anthropicApiKey !== 'string' || anthropicApiKey.length === 0) {
+    missing.push('ANTHROPIC_API_KEY');
+  }
   if (missing.length > 0) {
     throw new EnvNotConfiguredError(missing);
   }
@@ -106,6 +122,8 @@ export function readEnv(): InterviewSessionEnv {
     databaseUrl: databaseUrl as string,
     telegramBotToken: telegramBotToken as string,
     telegramChatId: telegramChatId as string,
+    openaiApiKey: openaiApiKey as string,
+    anthropicApiKey: anthropicApiKey as string,
   };
 }
 
@@ -129,8 +147,51 @@ export interface RunInterviewSessionDeps {
     sessionId: string,
     timeoutMs: number,
   ) => Promise<IncomingReplyEvent | null>;
+  /**
+   * Dispatches an Inngest event. PR 2 uses this for the
+   * `interview.session.opened` notification that the grammY bot consumes
+   * to populate its in-memory session map.
+   */
+  sendInngestEvent: (event: {
+    name: 'interview.session.opened';
+    data: { chatId: string; sessionId: string; candidateId: string };
+  }) => Promise<void>;
   /** Injectable for tests. Defaults to global `fetch`. */
   fetchFn?: typeof fetch;
+  /**
+   * Anthropic Opus 4.7 client used by the confirmation-loop. Required in
+   * production; tests inject a `vi.fn()`-backed mock.
+   */
+  anthropic: OpusAnthropicLike;
+  /**
+   * Per-question wait. Same shape as `waitForReply` but the loop names
+   * each wait with a different Inngest step id (`await-confirmation-N`)
+   * so retries are isolated per question.
+   */
+  waitForLoopReply: (
+    sessionId: string,
+    questionIndex: number,
+    timeoutMs: number,
+  ) => Promise<IncomingReplyEvent | null>;
+  /**
+   * Optional override for the confirmation loop. Production uses
+   * `runConfirmationLoop`; tests inject a stub that returns a fixed
+   * outcome to keep PR 1's integration tests focused.
+   */
+  runConfirmationLoop?: (
+    context: SessionContext,
+    selectSignals?: (
+      candidate: CandidateForInterview,
+    ) => Promise<readonly SignalForInterview[]>,
+  ) => Promise<ConfirmationLoopOutcome>;
+  /**
+   * Optional override for the per-cluster signal selection. Production
+   * binds this to the captureSignals Drizzle query; tests inject a
+   * fixture-backed function.
+   */
+  selectSignals?: (
+    candidate: CandidateForInterview,
+  ) => Promise<readonly SignalForInterview[]>;
 }
 
 /**
@@ -212,6 +273,36 @@ export async function runInterviewSession(
     );
   }
 
+  // 5b. (PR 2 backport) Dispatch `interview.session.opened` so the grammY
+  // bot's in-memory session map can attach `sessionId` to subsequent
+  // outbound `telegram.message.received` events. Done BEFORE the preview
+  // send so the bot is ready to accept Hassan's reply.
+  try {
+    await deps.sendInngestEvent({
+      name: 'interview.session.opened',
+      data: {
+        chatId: deps.env.telegramChatId,
+        sessionId,
+        candidateId,
+      },
+    });
+  } catch (err) {
+    // A failed event dispatch is recoverable on Inngest's retry of the
+    // whole function — we do NOT abort the run here because the session
+    // row has already been inserted. Log and continue.
+    const reason = err instanceof Error ? err.message : String(err);
+    deps.logger.error(
+      {
+        source: SOURCE,
+        action: 'session_opened_dispatch_failed',
+        sessionId,
+        candidateId,
+        reason,
+      },
+      'interview.session.opened dispatch failed; continuing',
+    );
+  }
+
   // 6. Send the preview message.
   const signalCount = candidate.evidenceChunkIds?.length ?? 0;
   const previewMessage = buildPreviewMessage({
@@ -265,14 +356,67 @@ export async function runInterviewSession(
     });
   }
 
-  // TODO(pr2): hand off to confirmation question loop. Until PR 2 lands,
-  // any non-/skip, non-null reply transitions out of PR 1 with the raw
-  // reply text recorded in the outcome.
-  return {
-    kind: 'preview_acknowledged',
+  // 9. Hand off to the confirmation-question loop. Per PR 2, any non-
+  // /skip, non-null reply transitions PR 1's `preview_sent` state into
+  // the confirming phase and runs the per-signal Q&A loop until either
+  // completion or a mid-loop 7-day timeout.
+  const context: SessionContext = {
     sessionId,
-    candidateId,
-    replyText: reply.data.text,
+    candidate: {
+      id: candidate.id,
+      pillar: candidate.pillar,
+      proposedTitle: candidate.proposedTitle,
+      primaryKeyword: candidate.primaryKeyword,
+      evidenceChunkIds: candidate.evidenceChunkIds,
+    },
+  };
+  const loop = deps.runConfirmationLoop ?? defaultRunConfirmationLoop(deps);
+  const loopOutcome = await loop(context, deps.selectSignals);
+  if (loopOutcome.kind === 'timed_out') {
+    return {
+      kind: 'timed_out',
+      sessionId: loopOutcome.sessionId,
+      candidateId: loopOutcome.candidateId,
+    };
+  }
+  return {
+    kind: 'completed',
+    sessionId: loopOutcome.sessionId,
+    candidateId: loopOutcome.candidateId,
+    confirmedCount: loopOutcome.confirmedCount,
+    excludedCount: loopOutcome.excludedCount,
+  };
+}
+
+/**
+ * Default loop binding — calls the in-tree `runConfirmationLoop` with the
+ * deps PR 2 wires from the Inngest factory. Hoisted out of
+ * `runInterviewSession` so test code can ignore it by passing
+ * `deps.runConfirmationLoop` explicitly.
+ */
+function defaultRunConfirmationLoop(
+  deps: RunInterviewSessionDeps,
+): (
+  context: SessionContext,
+  selectSignals?: (
+    candidate: CandidateForInterview,
+  ) => Promise<readonly SignalForInterview[]>,
+) => Promise<ConfirmationLoopOutcome> {
+  return (context, selectSignals) => {
+    const fetchFn = deps.fetchFn ?? fetch;
+    return runConfirmationLoop(
+      {
+        db: deps.db,
+        logger: deps.logger,
+        env: deps.env,
+        anthropic: deps.anthropic,
+        waitForReply: deps.waitForLoopReply,
+        fetchFn,
+        now: deps.now,
+        ...(selectSignals !== undefined ? { selectSignals } : {}),
+      },
+      context,
+    );
   };
 }
 
@@ -366,6 +510,10 @@ export function createInterviewSessionJob(
       const env = readEnv();
       const logger = createLogger({ source: SOURCE });
       const db = createDbClient({ connectionString: env.databaseUrl });
+      const Anthropic = (await import('@anthropic-ai/sdk')).default;
+      const anthropic = new Anthropic({
+        apiKey: env.anthropicApiKey,
+      }) as unknown as OpusAnthropicLike;
 
       const data = event.data as { candidateId?: unknown };
       const candidateId = data.candidateId;
@@ -375,12 +523,78 @@ export function createInterviewSessionJob(
         );
       }
 
+      const buildIfFilter = (sessionId: string): string =>
+        // Safe-by-construction interpolation: see PR 1's note in the
+        // waitForReply helper below for the safety argument.
+        `event.data.chatId == "${env.telegramChatId}" && event.data.sessionId == "${sessionId}"`;
+
+      const decodeReply = (
+        result: unknown,
+      ): IncomingReplyEvent | null => {
+        if (result === null) return null;
+        const r = result as {
+          data?: {
+            text?: unknown;
+            chatId?: unknown;
+            sessionId?: unknown;
+            messageType?: unknown;
+            voiceFileId?: unknown;
+            audioUrl?: unknown;
+            transcript?: unknown;
+            transcriptionError?: unknown;
+            callbackData?: unknown;
+          };
+        };
+        const text = r.data?.text;
+        const chatId = r.data?.chatId;
+        const sId = r.data?.sessionId;
+        if (
+          typeof text !== 'string' ||
+          typeof chatId !== 'string' ||
+          typeof sId !== 'string'
+        ) {
+          return null;
+        }
+        const messageType = r.data?.messageType;
+        const decoded: IncomingReplyEvent = {
+          data: {
+            text,
+            chatId,
+            sessionId: sId,
+            ...(messageType === 'text' ||
+            messageType === 'voice' ||
+            messageType === 'callback'
+              ? { messageType }
+              : {}),
+            ...(typeof r.data?.voiceFileId === 'string'
+              ? { voiceFileId: r.data.voiceFileId }
+              : {}),
+            ...(typeof r.data?.audioUrl === 'string'
+              ? { audioUrl: r.data.audioUrl }
+              : {}),
+            ...(typeof r.data?.transcript === 'string'
+              ? { transcript: r.data.transcript }
+              : r.data?.transcript === null
+                ? { transcript: null }
+                : {}),
+            ...(typeof r.data?.transcriptionError === 'string'
+              ? { transcriptionError: r.data.transcriptionError }
+              : {}),
+            ...(typeof r.data?.callbackData === 'string'
+              ? { callbackData: r.data.callbackData }
+              : {}),
+          },
+        };
+        return decoded;
+      };
+
       const outcome = await runInterviewSession(
         {
           db,
           logger,
           env,
           now: new Date(),
+          anthropic,
           sleepUntil: async (when) => {
             await step.sleepUntil('wait-monday-morning', when);
           },
@@ -403,24 +617,24 @@ export function createInterviewSessionJob(
               {
                 event: 'telegram.message.received',
                 timeout: `${timeoutMs}ms`,
-                if: `event.data.chatId == "${env.telegramChatId}" && event.data.sessionId == "${sessionId}"`,
+                if: buildIfFilter(sessionId),
               },
             );
-            if (result === null) return null;
-            const r = result as {
-              data?: { text?: unknown; chatId?: unknown; sessionId?: unknown };
-            };
-            const text = r.data?.text;
-            const chatId = r.data?.chatId;
-            const sId = r.data?.sessionId;
-            if (
-              typeof text !== 'string' ||
-              typeof chatId !== 'string' ||
-              typeof sId !== 'string'
-            ) {
-              return null;
-            }
-            return { data: { text, chatId, sessionId: sId } };
+            return decodeReply(result);
+          },
+          waitForLoopReply: async (sessionId, questionIndex, timeoutMs) => {
+            const result = await step.waitForEvent(
+              `await-confirmation-${questionIndex}`,
+              {
+                event: 'telegram.message.received',
+                timeout: `${timeoutMs}ms`,
+                if: buildIfFilter(sessionId),
+              },
+            );
+            return decodeReply(result);
+          },
+          sendInngestEvent: async (payload) => {
+            await step.sendEvent('dispatch-session-opened', payload);
           },
           fetchFn: fetch,
         },

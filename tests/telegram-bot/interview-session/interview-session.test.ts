@@ -182,6 +182,8 @@ const DEFAULT_ENV: InterviewSessionEnv = {
   databaseUrl: 'postgres://x',
   telegramBotToken: 'TOK',
   telegramChatId: 'CHAT',
+  openaiApiKey: 'oai',
+  anthropicApiKey: 'anth',
 };
 
 function defaultCandidate(): CandidateRow {
@@ -202,8 +204,18 @@ interface MakeDepsOverrides {
   env?: InterviewSessionEnv;
   sleepUntil?: ReturnType<typeof vi.fn>;
   waitForReply?: ReturnType<typeof vi.fn>;
+  waitForLoopReply?: ReturnType<typeof vi.fn>;
   fetchFn?: ReturnType<typeof vi.fn>;
   logger?: MockLogger;
+  sendInngestEvent?: ReturnType<typeof vi.fn>;
+  /**
+   * PR 2 backport: the integration test scaffold stubs the confirmation
+   * loop to a fixed `{ kind: 'completed', confirmedCount: 0,
+   * excludedCount: 0 }` so PR 1's assertions still focus on the preview
+   * / skip / timeout transitions rather than the Q&A inner loop. The
+   * confirmation loop has its own dedicated test file.
+   */
+  runConfirmationLoop?: ReturnType<typeof vi.fn>;
 }
 
 interface BuiltDeps {
@@ -214,13 +226,20 @@ interface BuiltDeps {
     env: InterviewSessionEnv;
     sleepUntil: ReturnType<typeof vi.fn>;
     waitForReply: ReturnType<typeof vi.fn>;
+    waitForLoopReply: ReturnType<typeof vi.fn>;
     fetchFn: typeof fetch;
+    sendInngestEvent: ReturnType<typeof vi.fn>;
+    anthropic: { messages: { create: ReturnType<typeof vi.fn> } };
+    runConfirmationLoop: ReturnType<typeof vi.fn>;
   };
   state: FakeDbState;
   logger: MockLogger;
   sleepUntil: ReturnType<typeof vi.fn>;
   waitForReply: ReturnType<typeof vi.fn>;
+  waitForLoopReply: ReturnType<typeof vi.fn>;
   fetchFn: ReturnType<typeof vi.fn>;
+  sendInngestEvent: ReturnType<typeof vi.fn>;
+  runConfirmationLoop: ReturnType<typeof vi.fn>;
 }
 
 function makeDeps(overrides: MakeDepsOverrides = {}): BuiltDeps {
@@ -239,7 +258,21 @@ function makeDeps(overrides: MakeDepsOverrides = {}): BuiltDeps {
         data: { text: 'ok lets do it', chatId: 'CHAT', sessionId: 'sess-1' },
       }),
     );
+  const waitForLoopReply =
+    overrides.waitForLoopReply ?? vi.fn(async () => null);
   const fetchFn = overrides.fetchFn ?? makeFetchOk();
+  const sendInngestEvent =
+    overrides.sendInngestEvent ?? vi.fn(async () => undefined);
+  const runConfirmationLoop =
+    overrides.runConfirmationLoop ??
+    vi.fn(async (context: { sessionId: string; candidate: { id: string } }) => ({
+      kind: 'completed' as const,
+      sessionId: context.sessionId,
+      candidateId: context.candidate.id,
+      confirmedCount: 0,
+      excludedCount: 0,
+    }));
+  const anthropic = { messages: { create: vi.fn() } };
   const deps = {
     db,
     logger,
@@ -247,9 +280,23 @@ function makeDeps(overrides: MakeDepsOverrides = {}): BuiltDeps {
     env: overrides.env ?? DEFAULT_ENV,
     sleepUntil,
     waitForReply,
+    waitForLoopReply,
     fetchFn: fetchFn as unknown as typeof fetch,
+    sendInngestEvent,
+    anthropic,
+    runConfirmationLoop,
   };
-  return { deps, state, logger, sleepUntil, waitForReply, fetchFn };
+  return {
+    deps,
+    state,
+    logger,
+    sleepUntil,
+    waitForReply,
+    waitForLoopReply,
+    fetchFn,
+    sendInngestEvent,
+    runConfirmationLoop,
+  };
 }
 
 function getFetchBodies(
@@ -264,17 +311,30 @@ function getFetchBodies(
 // --- Test cases -----------------------------------------------------------
 
 describe('runInterviewSession', () => {
-  it('happy path: preview acknowledged — full transitions, single fetch, single sleep', async () => {
-    const { deps, state, sleepUntil, fetchFn } = makeDeps();
+  it('happy path: preview acknowledged → completed via stubbed loop, full transitions', async () => {
+    const { deps, state, sleepUntil, fetchFn, sendInngestEvent } = makeDeps();
 
     const outcome = await runInterviewSession(deps, 'cand-1');
 
+    // PR 2: the stubbed confirmation loop returns `completed` with zero
+    // confirmations. The integration shape mirrors the old PR 1
+    // `preview_acknowledged` outcome plus the new counts.
     expect(outcome).toEqual({
-      kind: 'preview_acknowledged',
+      kind: 'completed',
       sessionId: 'sess-1',
       candidateId: 'cand-1',
-      replyText: 'ok lets do it',
+      confirmedCount: 0,
+      excludedCount: 0,
     } satisfies RunOutcome);
+
+    // PR 2 backport: `interview.session.opened` is dispatched after the
+    // session insert so the grammY bot can attach the sessionId to
+    // subsequent `telegram.message.received` events.
+    expect(sendInngestEvent).toHaveBeenCalledTimes(1);
+    expect(sendInngestEvent.mock.calls[0]![0]).toEqual({
+      name: 'interview.session.opened',
+      data: { chatId: 'CHAT', sessionId: 'sess-1', candidateId: 'cand-1' },
+    });
 
     // sleepUntil called exactly once with the Mon-after-NOW Date.
     // 2026-05-24 (Sun) → next Mon 2026-05-25 08:00 EDT = 12:00 UTC.
@@ -436,7 +496,7 @@ describe('runInterviewSession', () => {
 
     const outcome = await runInterviewSession(deps, 'cand-1');
 
-    expect(outcome.kind).toBe('preview_acknowledged');
+    expect(outcome.kind).toBe('completed');
 
     // Zero updates to article_candidates (no redundant write).
     const candidateUpdates = state.updateCalls.filter(
@@ -464,7 +524,8 @@ describe('runInterviewSession', () => {
 
     const outcome = await runInterviewSession(deps, 'cand-1');
 
-    expect(outcome.kind).toBe('preview_acknowledged');
+    // PR 2: with the stubbed confirmation loop, the outcome is `completed`.
+    expect(outcome.kind).toBe('completed');
     expect(waitForReply).toHaveBeenCalledTimes(1);
 
     // Session was inserted; candidate was updated to awaiting_interview.
