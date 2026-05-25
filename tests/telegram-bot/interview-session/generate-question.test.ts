@@ -17,6 +17,8 @@ import { describe, expect, it, vi } from 'vitest';
 
 import {
   OPUS_MODEL,
+  SYSTEM_PROMPT,
+  buildPerSignalInstruction,
   generateQuestion,
 } from '../../../artifacts/telegram-bot/src/jobs/interview-session/generate-question.js';
 import type {
@@ -341,6 +343,10 @@ describe('generateQuestion', () => {
     }
   });
 
+  it('SYSTEM_PROMPT content matches snapshot (locks the engineered prompt against accidental edits)', () => {
+    expect(SYSTEM_PROMPT).toMatchSnapshot();
+  });
+
   it('returned question.signal_id is overridden to the input signal id (defence against schema-conforming-but-wrong responses)', async () => {
     const { anthropic } = makeAnthropic(async () => ({
       stop_reason: 'end_turn',
@@ -368,5 +374,71 @@ describe('generateQuestion', () => {
     if (result.ok) {
       expect(result.question.signal_id).toBe(SIGNAL.id);
     }
+  });
+});
+
+// ---------------------------------------------------------------------------
+// buildPerSignalInstruction — pure function, snapshot-locked across the three
+// shapes the orchestrator actually produces (first attempt, retry attempt,
+// over-long redacted text that exercises the 500-char truncation).
+// ---------------------------------------------------------------------------
+
+describe('buildPerSignalInstruction', () => {
+  const BASE_SIGNAL: SelectedSignal = {
+    id: '22222222-2222-2222-2222-222222222222',
+    capturedAt: new Date('2026-05-20T14:23:00Z'),
+    redactedText:
+      'Subject: Re: Conditional Access AADSTS50158 retry loop. From: <REDACTED:person>. Body: Confirmed — adding the device-compliance grant solved it. Took 40 min.',
+    source: 'msgraph',
+    tokenCount: 800,
+  };
+
+  const BASE_CANDIDATE = {
+    proposedTitle: 'Conditional Access for iOS',
+    primaryKeyword: 'Conditional Access for iOS Authenticator',
+  };
+
+  it('first-attempt shape (no retry reason)', () => {
+    const out = buildPerSignalInstruction({
+      signal: BASE_SIGNAL,
+      candidate: BASE_CANDIDATE,
+      anthropic: { messages: { create: async () => ({ stop_reason: null, content: [] }) } },
+      logger: makeLogger(),
+      clusterContextBlock: 'CTX',
+    });
+    expect(out).toMatchSnapshot();
+    expect(out).toContain(`signal_id: ${BASE_SIGNAL.id}`);
+    expect(out).toContain('captured_at: Wednesday at 2:23 PM UTC');
+    expect(out).toContain(`primary_keyword: ${BASE_CANDIDATE.primaryKeyword}`);
+    expect(out).not.toMatch(/Previous attempt failed the quality gate/);
+  });
+
+  it('retry-attempt shape (retryReason appended as trailing paragraph)', () => {
+    const out = buildPerSignalInstruction({
+      signal: BASE_SIGNAL,
+      candidate: BASE_CANDIDATE,
+      anthropic: { messages: { create: async () => ({ stop_reason: null, content: [] }) } },
+      logger: makeLogger(),
+      clusterContextBlock: 'CTX',
+      retryReason: 'word_count+generic_phrase',
+    });
+    expect(out).toMatchSnapshot();
+    expect(out).toMatch(/Previous attempt failed the quality gate/);
+    expect(out).toContain('word_count+generic_phrase');
+    expect(out).toContain('Anchor on a concrete detail');
+  });
+
+  it('long-redacted-text shape (truncates to first 500 chars)', () => {
+    const long = 'A'.repeat(800) + 'TAIL_MARKER';
+    const out = buildPerSignalInstruction({
+      signal: { ...BASE_SIGNAL, redactedText: long },
+      candidate: BASE_CANDIDATE,
+      anthropic: { messages: { create: async () => ({ stop_reason: null, content: [] }) } },
+      logger: makeLogger(),
+      clusterContextBlock: 'CTX',
+    });
+    expect(out).toMatchSnapshot();
+    expect(out).toContain('A'.repeat(500));
+    expect(out).not.toContain('TAIL_MARKER');
   });
 });
