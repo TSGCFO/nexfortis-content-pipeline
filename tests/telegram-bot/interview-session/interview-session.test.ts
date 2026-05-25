@@ -182,6 +182,7 @@ const DEFAULT_ENV: InterviewSessionEnv = {
   databaseUrl: 'postgres://x',
   telegramBotToken: 'TOK',
   telegramChatId: 'CHAT',
+  anthropicApiKey: 'AKEY',
 };
 
 function defaultCandidate(): CandidateRow {
@@ -204,6 +205,7 @@ interface MakeDepsOverrides {
   waitForReply?: ReturnType<typeof vi.fn>;
   fetchFn?: ReturnType<typeof vi.fn>;
   logger?: MockLogger;
+  sendInngestEvent?: ReturnType<typeof vi.fn>;
 }
 
 interface BuiltDeps {
@@ -215,12 +217,14 @@ interface BuiltDeps {
     sleepUntil: ReturnType<typeof vi.fn>;
     waitForReply: ReturnType<typeof vi.fn>;
     fetchFn: typeof fetch;
+    sendInngestEvent: ReturnType<typeof vi.fn>;
   };
   state: FakeDbState;
   logger: MockLogger;
   sleepUntil: ReturnType<typeof vi.fn>;
   waitForReply: ReturnType<typeof vi.fn>;
   fetchFn: ReturnType<typeof vi.fn>;
+  sendInngestEvent: ReturnType<typeof vi.fn>;
 }
 
 function makeDeps(overrides: MakeDepsOverrides = {}): BuiltDeps {
@@ -240,6 +244,8 @@ function makeDeps(overrides: MakeDepsOverrides = {}): BuiltDeps {
       }),
     );
   const fetchFn = overrides.fetchFn ?? makeFetchOk();
+  const sendInngestEvent =
+    overrides.sendInngestEvent ?? vi.fn(async () => undefined);
   const deps = {
     db,
     logger,
@@ -248,8 +254,17 @@ function makeDeps(overrides: MakeDepsOverrides = {}): BuiltDeps {
     sleepUntil,
     waitForReply,
     fetchFn: fetchFn as unknown as typeof fetch,
+    sendInngestEvent,
   };
-  return { deps, state, logger, sleepUntil, waitForReply, fetchFn };
+  return {
+    deps,
+    state,
+    logger,
+    sleepUntil,
+    waitForReply,
+    fetchFn,
+    sendInngestEvent,
+  };
 }
 
 function getFetchBodies(
@@ -627,5 +642,51 @@ describe('runInterviewSession', () => {
     expect(sleepUntil).toHaveBeenCalledTimes(1);
     const arg = sleepUntil.mock.calls[0]![0] as Date;
     expect(arg.toISOString()).toBe('2026-01-12T13:00:00.000Z');
+  });
+
+  // ----- PR 2 backport tests ---------------------------------------------
+
+  it('dispatches interview.session.opened exactly once after the session insert', async () => {
+    const { deps, sendInngestEvent } = makeDeps();
+    await runInterviewSession(deps, 'cand-1');
+    expect(sendInngestEvent).toHaveBeenCalledTimes(1);
+    const payload = sendInngestEvent.mock.calls[0]![0] as {
+      name: string;
+      data: { chatId: string; sessionId: string; candidateId: string };
+    };
+    expect(payload.name).toBe('interview.session.opened');
+    expect(payload.data.chatId).toBe('CHAT');
+    expect(payload.data.sessionId).toBe('sess-1');
+    expect(payload.data.candidateId).toBe('cand-1');
+  });
+
+  it('does NOT dispatch interview.session.opened when candidate is missing (no session row to advertise)', async () => {
+    const { deps, sendInngestEvent } = makeDeps({ candidateRows: [] });
+    await runInterviewSession(deps, 'cand-1');
+    expect(sendInngestEvent).not.toHaveBeenCalled();
+  });
+
+  it('session.opened dispatch failure: warn-logs, does not throw, preview still sends', async () => {
+    const failingDispatch = vi.fn(async () => {
+      throw new Error('Inngest dispatch unreachable');
+    });
+    const { deps, logger, fetchFn } = makeDeps({
+      sendInngestEvent: failingDispatch,
+    });
+    const outcome = await runInterviewSession(deps, 'cand-1');
+    // PR 2 happy path still resolves (preview_acknowledged remains in PR 1
+    // tests until Phase G replaces the branch with confirmation-loop wiring).
+    expect(outcome.kind).toBe('preview_acknowledged');
+    expect(failingDispatch).toHaveBeenCalledTimes(1);
+    // Warn logged with the right action.
+    const warnCalls = logger.warn.mock.calls;
+    const dispatchWarn = warnCalls.find(
+      (c) =>
+        (c[0] as Record<string, unknown>)['action'] ===
+        'session_opened_dispatch_failed',
+    );
+    expect(dispatchWarn).toBeDefined();
+    // Preview send still happened.
+    expect(fetchFn).toHaveBeenCalled();
   });
 });

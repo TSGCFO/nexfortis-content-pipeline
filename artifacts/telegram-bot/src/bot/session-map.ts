@@ -15,7 +15,7 @@
  * will introduce explicit close-event handling.
  */
 
-import { and, eq, inArray } from 'drizzle-orm';
+import { and, inArray } from 'drizzle-orm';
 
 import { interviewSessions, type Database } from '@ncp/db';
 

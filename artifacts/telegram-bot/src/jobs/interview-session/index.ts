@@ -80,14 +80,19 @@ const TERMINAL_CANDIDATE_STATUSES: ReadonlySet<string> = new Set([
 ]);
 
 /**
- * Read and validate the env vars this slice (PR 1) actually uses. Future
- * PRs will extend this with `OPENAI_API_KEY`, `ANTHROPIC_API_KEY`,
- * `INNGEST_*`, `SUPABASE_*` as those integrations land.
+ * Read and validate the env vars this Inngest function uses.
+ *
+ * PR 1 required `DATABASE_URL`, `TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID`.
+ * PR 2 adds `ANTHROPIC_API_KEY` (Claude Opus 4.7 question generation).
+ * The bot process itself reads additional vars (`OPENAI_API_KEY` for
+ * Whisper) via `bot/env.ts::readBotEnv()` — that surface is separate
+ * because the Inngest function never transcribes voice notes itself.
  */
 export function readEnv(): InterviewSessionEnv {
   const databaseUrl = process.env['DATABASE_URL'];
   const telegramBotToken = process.env['TELEGRAM_BOT_TOKEN'];
   const telegramChatId = process.env['TELEGRAM_CHAT_ID'];
+  const anthropicApiKey = process.env['ANTHROPIC_API_KEY'];
 
   const missing: string[] = [];
   if (typeof databaseUrl !== 'string' || databaseUrl.length === 0) {
@@ -99,6 +104,9 @@ export function readEnv(): InterviewSessionEnv {
   if (typeof telegramChatId !== 'string' || telegramChatId.length === 0) {
     missing.push('TELEGRAM_CHAT_ID');
   }
+  if (typeof anthropicApiKey !== 'string' || anthropicApiKey.length === 0) {
+    missing.push('ANTHROPIC_API_KEY');
+  }
   if (missing.length > 0) {
     throw new EnvNotConfiguredError(missing);
   }
@@ -106,6 +114,7 @@ export function readEnv(): InterviewSessionEnv {
     databaseUrl: databaseUrl as string,
     telegramBotToken: telegramBotToken as string,
     telegramChatId: telegramChatId as string,
+    anthropicApiKey: anthropicApiKey as string,
   };
 }
 
@@ -129,6 +138,17 @@ export interface RunInterviewSessionDeps {
     sessionId: string,
     timeoutMs: number,
   ) => Promise<IncomingReplyEvent | null>;
+  /**
+   * Dispatches `interview.session.opened` so the bot process's in-memory
+   * `chatId → ActiveSession` map can include this newly-created session.
+   * Maps to `step.sendEvent('open-session', ...)` in the Inngest wiring.
+   * PR 2 backport — never throws on send failure; the loop logs and
+   * continues so a flaky Inngest dispatch doesn't orphan the session row.
+   */
+  sendInngestEvent: (payload: {
+    name: 'interview.session.opened';
+    data: { chatId: string; sessionId: string; candidateId: string };
+  }) => Promise<void>;
   /** Injectable for tests. Defaults to global `fetch`. */
   fetchFn?: typeof fetch;
 }
@@ -209,6 +229,36 @@ export async function runInterviewSession(
   if (typeof sessionId !== 'string') {
     throw new Error(
       'interview-session: failed to capture inserted interview_sessions id',
+    );
+  }
+
+  // 5b. PR 2 backport — dispatch `interview.session.opened` so the bot's
+  // in-memory chatId→ActiveSession map can record this fresh session.
+  // The dispatch is best-effort: a failed send must not orphan the
+  // already-inserted session row (which would otherwise leak into the
+  // pipeline without ever being interviewable).
+  // TODO(pr3): once mid-session command handlers (/status, /help,
+  // /delete_signal) and the 48-hour reminder scheduler land, the
+  // dispatch will also need to seed scheduler entries.
+  try {
+    await deps.sendInngestEvent({
+      name: 'interview.session.opened',
+      data: {
+        chatId: deps.env.telegramChatId,
+        sessionId,
+        candidateId,
+      },
+    });
+  } catch (err) {
+    deps.logger.warn(
+      {
+        source: SOURCE,
+        action: 'session_opened_dispatch_failed',
+        sessionId,
+        candidateId,
+        reason: err instanceof Error ? err.message : String(err),
+      },
+      'interview.session.opened dispatch failed; bot may miss in-memory mapping until restart',
     );
   }
 
@@ -383,6 +433,13 @@ export function createInterviewSessionJob(
           now: new Date(),
           sleepUntil: async (when) => {
             await step.sleepUntil('wait-monday-morning', when);
+          },
+          sendInngestEvent: async (payload) => {
+            // step.sendEvent is durable and cannot nest inside
+            // step.run — same constraint as `waitForReply` below. The
+            // body of `runInterviewSession` is intentionally not
+            // wrapped in step.run, so a direct call here is correct.
+            await step.sendEvent('open-session', payload);
           },
           waitForReply: async (sessionId, timeoutMs) => {
             // Inngest's typed `match` is @deprecated in v3.54.x and only

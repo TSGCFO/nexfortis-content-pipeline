@@ -11,6 +11,7 @@ const REQUIRED = [
   'DATABASE_URL',
   'TELEGRAM_BOT_TOKEN',
   'TELEGRAM_CHAT_ID',
+  'ANTHROPIC_API_KEY',
 ] as const;
 
 const ORIGINAL_ENV = { ...process.env };
@@ -20,15 +21,17 @@ afterEach(() => {
 });
 
 describe('readEnv', () => {
-  it('returns the typed env when all three vars are set', () => {
+  it('returns the typed env when all four vars are set', () => {
     process.env['DATABASE_URL'] = 'postgres://x';
     process.env['TELEGRAM_BOT_TOKEN'] = 'btoken';
     process.env['TELEGRAM_CHAT_ID'] = 'chat';
+    process.env['ANTHROPIC_API_KEY'] = 'akey';
     const env = readEnv();
     expect(env).toEqual({
       databaseUrl: 'postgres://x',
       telegramBotToken: 'btoken',
       telegramChatId: 'chat',
+      anthropicApiKey: 'akey',
     });
   });
 
@@ -36,6 +39,7 @@ describe('readEnv', () => {
     delete process.env['DATABASE_URL'];
     process.env['TELEGRAM_BOT_TOKEN'] = 'btoken';
     process.env['TELEGRAM_CHAT_ID'] = 'chat';
+    process.env['ANTHROPIC_API_KEY'] = 'akey';
     try {
       readEnv();
       throw new Error('expected throw');
@@ -48,7 +52,7 @@ describe('readEnv', () => {
     }
   });
 
-  it('throws listing all three when none are set', () => {
+  it('throws listing all four when none are set', () => {
     for (const name of REQUIRED) delete process.env[name];
     try {
       readEnv();
@@ -60,6 +64,7 @@ describe('readEnv', () => {
         'DATABASE_URL',
         'TELEGRAM_BOT_TOKEN',
         'TELEGRAM_CHAT_ID',
+        'ANTHROPIC_API_KEY',
       ]);
     }
   });
@@ -68,6 +73,7 @@ describe('readEnv', () => {
     process.env['DATABASE_URL'] = 'postgres://x';
     process.env['TELEGRAM_BOT_TOKEN'] = '';
     process.env['TELEGRAM_CHAT_ID'] = 'chat';
+    process.env['ANTHROPIC_API_KEY'] = 'akey';
     try {
       readEnv();
       throw new Error('expected throw');
@@ -78,11 +84,11 @@ describe('readEnv', () => {
     }
   });
 
-  it('does NOT throw when only unrelated vars (ANTHROPIC_API_KEY, OPENAI_API_KEY) are present alongside the three required ones', () => {
+  it('does NOT throw when only unrelated vars (OPENAI_API_KEY, INNGEST_EVENT_KEY) are present alongside the four required ones', () => {
     process.env['DATABASE_URL'] = 'postgres://x';
     process.env['TELEGRAM_BOT_TOKEN'] = 'btoken';
     process.env['TELEGRAM_CHAT_ID'] = 'chat';
-    process.env['ANTHROPIC_API_KEY'] = 'foo';
+    process.env['ANTHROPIC_API_KEY'] = 'akey';
     process.env['OPENAI_API_KEY'] = 'bar';
     process.env['INNGEST_EVENT_KEY'] = 'baz';
     expect(() => readEnv()).not.toThrow();
