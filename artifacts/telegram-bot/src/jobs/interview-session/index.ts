@@ -1,35 +1,50 @@
 /**
- * Inngest function: `interview-session` (PR 1 of 3 — F2 Telegram bot).
+ * Inngest function: `interview-session` (PR 2 of 3 — F2 Telegram bot).
  *
  * Triggered by the synthesis worker's `interview.session.requested` event
  * (`{ candidateId: string }`). Sleeps until the next Monday 08:00
  * America/New_York (Eastern, DST-correct), sends a topic preview to
- * Hassan's Telegram chat, then waits up to 7 days for a reply.
+ * Hassan's Telegram chat, waits for a reply, then runs the confirmation
+ * loop (up to 5 Claude-Opus-4.7-generated questions with three-button
+ * answers / voice / text), and finally transitions the session +
+ * candidate to terminal status.
  *
- * --- Scope (PR 1 only) ----------------------------------------------------
+ * --- Scope (PR 2) ---------------------------------------------------------
  *
  *  Implemented:
- *    - readEnv() validation for the 3 vars actually used in this slice
- *    - Monday-morning preview send
- *    - candidate status guard (missing / terminal → return no_candidate)
- *    - candidate status transition to 'awaiting_interview'
- *    - interview_sessions row insert with status='preview_sent'
- *    - waitForReply with three terminal branches: null (timeout) /
- *      '/skip' / anything else (preview_acknowledged → handoff to PR 2)
+ *    - readEnv() validation for the 4 vars actually used (PR 1's 3 +
+ *      ANTHROPIC_API_KEY)
+ *    - Monday-morning preview send (PR 1)
+ *    - candidate / terminal-status guard (PR 1)
+ *    - interview_sessions row insert with status='preview_sent' (PR 1)
+ *    - PR 2 backport: dispatch `interview.session.opened` so the
+ *      grammY long-poller populates its in-memory `chatId → ActiveSession`
+ *      map
+ *    - PR 1 terminal branches preserved: timeout (null reply), '/skip',
+ *      candidate missing / already terminal
+ *    - PR 2 new branch: confirmation loop (Phase 1 generate-and-gate +
+ *      Phase 2 send-and-wait per question), terminating in `completed`
+ *      or `timed_out` (mid-loop)
  *
- *  NOT in PR 1:
- *    - grammY long-poll listener that produces `telegram.message.received`
- *    - Confirmation questions, voice transcription, LLM calls
- *    - 48-hour reminder, all-skipped fallback
+ *  NOT in PR 2 (left for PR 3):
+ *    - 48-hour soft reminder (PRD §4.7 / AC-F2-05)
+ *    - All-skipped fallback open-ended question (US-F2-08 / AC-F2-07)
+ *    - Open-ended SERP-gap follow-up question (PRD §4.4)
+ *    - Claude Haiku closing summary (PRD §4.5 / §7.1) — PR 2 sends the
+ *      hardcoded placeholder via `buildCompletionPlaceholderMessage`
  *    - /status, /help, /delete_signal commands
- *    - Closing summary
+ *    - Mid-session /skip handler (PR 2 leaves it falling through as a
+ *      plain text answer to the current question)
  *
  * --- Architecture ---------------------------------------------------------
  *
  * The DI core `runInterviewSession(deps, candidateId)` is exported for
  * testing — it has no Inngest dependency. The factory
  * `createInterviewSessionJob(inngest)` plumbs Inngest's step primitives
- * (`step.sleepUntil`, `step.waitForEvent`) through the deps object.
+ * (`step.sleepUntil`, `step.waitForEvent`, `step.sendEvent`) through the
+ * deps object, plus an `Anthropic` SDK instance cast to the local
+ * `OpusAnthropicLike` structural type (see `anthropic-shapes.ts` for the
+ * cast rationale).
  *
  * Note: `step.sleepUntil` and `step.waitForEvent` cannot nest inside
  * `step.run`, so the body of `runInterviewSession` is not wrapped in a
@@ -50,10 +65,15 @@ import {
 } from '@ncp/db';
 import { createLogger, type Logger } from '@ncp/logger';
 
+import Anthropic from '@anthropic-ai/sdk';
+
+import type { OpusAnthropicLike } from './anthropic-shapes.js';
 import { buildPreviewMessage } from './build-preview-message.js';
 import { buildSkipAckMessage } from './build-skip-ack-message.js';
 import { buildTimeoutMessage } from './build-timeout-message.js';
+import { runConfirmationLoop } from './confirmation-loop.js';
 import { EnvNotConfiguredError } from './errors.js';
+import { buildCompletionPlaceholderMessage } from './messages.js';
 import { nextMondayAt8amEastern } from './next-monday-eastern.js';
 import { sendTelegramMessage } from './send-telegram-message.js';
 import type {
@@ -80,14 +100,19 @@ const TERMINAL_CANDIDATE_STATUSES: ReadonlySet<string> = new Set([
 ]);
 
 /**
- * Read and validate the env vars this slice (PR 1) actually uses. Future
- * PRs will extend this with `OPENAI_API_KEY`, `ANTHROPIC_API_KEY`,
- * `INNGEST_*`, `SUPABASE_*` as those integrations land.
+ * Read and validate the env vars this Inngest function uses.
+ *
+ * PR 1 required `DATABASE_URL`, `TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID`.
+ * PR 2 adds `ANTHROPIC_API_KEY` (Claude Opus 4.7 question generation).
+ * The bot process itself reads additional vars (`OPENAI_API_KEY` for
+ * Whisper) via `bot/env.ts::readBotEnv()` — that surface is separate
+ * because the Inngest function never transcribes voice notes itself.
  */
 export function readEnv(): InterviewSessionEnv {
   const databaseUrl = process.env['DATABASE_URL'];
   const telegramBotToken = process.env['TELEGRAM_BOT_TOKEN'];
   const telegramChatId = process.env['TELEGRAM_CHAT_ID'];
+  const anthropicApiKey = process.env['ANTHROPIC_API_KEY'];
 
   const missing: string[] = [];
   if (typeof databaseUrl !== 'string' || databaseUrl.length === 0) {
@@ -99,6 +124,9 @@ export function readEnv(): InterviewSessionEnv {
   if (typeof telegramChatId !== 'string' || telegramChatId.length === 0) {
     missing.push('TELEGRAM_CHAT_ID');
   }
+  if (typeof anthropicApiKey !== 'string' || anthropicApiKey.length === 0) {
+    missing.push('ANTHROPIC_API_KEY');
+  }
   if (missing.length > 0) {
     throw new EnvNotConfiguredError(missing);
   }
@@ -106,6 +134,7 @@ export function readEnv(): InterviewSessionEnv {
     databaseUrl: databaseUrl as string,
     telegramBotToken: telegramBotToken as string,
     telegramChatId: telegramChatId as string,
+    anthropicApiKey: anthropicApiKey as string,
   };
 }
 
@@ -129,6 +158,24 @@ export interface RunInterviewSessionDeps {
     sessionId: string,
     timeoutMs: number,
   ) => Promise<IncomingReplyEvent | null>;
+  /**
+   * Dispatches `interview.session.opened` so the bot process's in-memory
+   * `chatId → ActiveSession` map can include this newly-created session.
+   * Maps to `step.sendEvent('open-session', ...)` in the Inngest wiring.
+   * PR 2 backport — never throws on send failure; the loop logs and
+   * continues so a flaky Inngest dispatch doesn't orphan the session row.
+   */
+  sendInngestEvent: (payload: {
+    name: 'interview.session.opened';
+    data: { chatId: string; sessionId: string; candidateId: string };
+  }) => Promise<void>;
+  /**
+   * Claude Opus 4.7 client (structurally typed wider than @anthropic-ai/sdk
+   * @0.28's surface to expose `thinking`, `output_config`, and
+   * `cache_control` — see `anthropic-shapes.ts` for the cast rationale).
+   * Tests inject a `{ messages: { create: vi.fn() } }` mock.
+   */
+  anthropic: OpusAnthropicLike;
   /** Injectable for tests. Defaults to global `fetch`. */
   fetchFn?: typeof fetch;
 }
@@ -212,6 +259,36 @@ export async function runInterviewSession(
     );
   }
 
+  // 5b. PR 2 backport — dispatch `interview.session.opened` so the bot's
+  // in-memory chatId→ActiveSession map can record this fresh session.
+  // The dispatch is best-effort: a failed send must not orphan the
+  // already-inserted session row (which would otherwise leak into the
+  // pipeline without ever being interviewable).
+  // TODO(pr3): once mid-session command handlers (/status, /help,
+  // /delete_signal) and the 48-hour reminder scheduler land, the
+  // dispatch will also need to seed scheduler entries.
+  try {
+    await deps.sendInngestEvent({
+      name: 'interview.session.opened',
+      data: {
+        chatId: deps.env.telegramChatId,
+        sessionId,
+        candidateId,
+      },
+    });
+  } catch (err) {
+    deps.logger.warn(
+      {
+        source: SOURCE,
+        action: 'session_opened_dispatch_failed',
+        sessionId,
+        candidateId,
+        reason: err instanceof Error ? err.message : String(err),
+      },
+      'interview.session.opened dispatch failed; bot may miss in-memory mapping until restart',
+    );
+  }
+
   // 6. Send the preview message.
   const signalCount = candidate.evidenceChunkIds?.length ?? 0;
   const previewMessage = buildPreviewMessage({
@@ -265,15 +342,83 @@ export async function runInterviewSession(
     });
   }
 
-  // TODO(pr2): hand off to confirmation question loop. Until PR 2 lands,
-  // any non-/skip, non-null reply transitions out of PR 1 with the raw
-  // reply text recorded in the outcome.
-  return {
-    kind: 'preview_acknowledged',
-    sessionId,
-    candidateId,
-    replyText: reply.data.text,
-  };
+  // 9. Hand off to the confirmation loop (PR 2).
+  const loopOutcome = await runConfirmationLoop(
+    {
+      db: deps.db,
+      logger: deps.logger,
+      now: deps.now,
+      env: deps.env,
+      anthropic: deps.anthropic,
+      fetchFn,
+      waitForReply: deps.waitForReply,
+    },
+    {
+      sessionId,
+      candidateId,
+      candidate: {
+        proposedTitle: candidate.proposedTitle,
+        pillar: candidate.pillar,
+        primaryKeyword: candidate.primaryKeyword,
+        evidenceChunkIds: candidate.evidenceChunkIds,
+      },
+    },
+  );
+
+  // 10. Resolve the loop outcome to a terminal RunOutcome.
+  switch (loopOutcome.kind) {
+    case 'timed_out':
+      // The confirmation loop already transitioned session→timed_out +
+      // candidate→archived and sent the timeout message. Just bubble up.
+      return { kind: 'timed_out', sessionId, candidateId };
+    case 'no_signals':
+      // The candidate had no selectable signals — treat like a clean
+      // completion with zero confirmations rather than abandoning the
+      // session row in `preview_sent`. The placeholder send happens via
+      // the same path as `completed`.
+      // fall through
+    case 'completed': {
+      const confirmedCount =
+        loopOutcome.kind === 'completed' ? loopOutcome.confirmedCount : 0;
+      const excludedCount =
+        loopOutcome.kind === 'completed' ? loopOutcome.excludedCount : 0;
+      await deps.db
+        .update(interviewSessions)
+        .set({ status: 'completed', completedAt: deps.now })
+        .where(eq(interviewSessions.id, sessionId));
+      await deps.db
+        .update(articleCandidates)
+        .set({ status: 'interview_complete' })
+        .where(eq(articleCandidates.id, candidateId));
+      // TODO(pr3): replace this hardcoded placeholder with a
+      // Claude-Haiku-generated closing summary (PRD §4.5 / §7.1).
+      const ack = await sendTelegramMessage({
+        token: deps.env.telegramBotToken,
+        chatId: deps.env.telegramChatId,
+        message: buildCompletionPlaceholderMessage({ confirmedCount }),
+        fetchFn,
+      });
+      if (!ack.ok) {
+        deps.logger.warn(
+          {
+            source: SOURCE,
+            action: 'completion_ack_send_failed',
+            sessionId,
+            candidateId,
+            reason: ack.error,
+          },
+          'telegram completion ack send failed',
+        );
+      }
+      return {
+        kind: 'completed',
+        sessionId,
+        candidateId,
+        confirmedCount,
+        excludedCount,
+      };
+    }
+  }
 }
 
 interface ResolveTerminalArgs {
@@ -375,14 +520,31 @@ export function createInterviewSessionJob(
         );
       }
 
+      // Construct the Anthropic client. The single `as unknown as
+      // OpusAnthropicLike` cast site permitted by the prompt's "DI test
+      // mock boundaries" carve-out — the SDK 0.28's TypeScript surface
+      // does not surface `thinking` / `output_config` / `cache_control`,
+      // but the wire protocol forwards unknown keys correctly.
+      const anthropic = new Anthropic({
+        apiKey: env.anthropicApiKey,
+      }) as unknown as OpusAnthropicLike;
+
       const outcome = await runInterviewSession(
         {
           db,
           logger,
           env,
           now: new Date(),
+          anthropic,
           sleepUntil: async (when) => {
             await step.sleepUntil('wait-monday-morning', when);
+          },
+          sendInngestEvent: async (payload) => {
+            // step.sendEvent is durable and cannot nest inside
+            // step.run — same constraint as `waitForReply` below. The
+            // body of `runInterviewSession` is intentionally not
+            // wrapped in step.run, so a direct call here is correct.
+            await step.sendEvent('open-session', payload);
           },
           waitForReply: async (sessionId, timeoutMs) => {
             // Inngest's typed `match` is @deprecated in v3.54.x and only
@@ -398,6 +560,13 @@ export function createInterviewSessionJob(
             // literal cannot break the expression. If this ever changes
             // (e.g. session ids become opaque strings), escape both values
             // before interpolation.
+            //
+            // The same CEL filter is reused inside `confirmation-loop` via
+            // this same `waitForReply` closure — there is only one
+            // step.waitForEvent in this Inngest function and Inngest's
+            // durable replays correctly distinguish multiple calls by
+            // their step name. We use the same name on each call because
+            // they are sequential, not concurrent.
             const result = await step.waitForEvent(
               'await-preview-response',
               {
@@ -408,7 +577,17 @@ export function createInterviewSessionJob(
             );
             if (result === null) return null;
             const r = result as {
-              data?: { text?: unknown; chatId?: unknown; sessionId?: unknown };
+              data?: {
+                text?: unknown;
+                chatId?: unknown;
+                sessionId?: unknown;
+                messageType?: unknown;
+                callbackData?: unknown;
+                transcript?: unknown;
+                audioUrl?: unknown;
+                voiceFileId?: unknown;
+                transcriptionError?: unknown;
+              };
             };
             const text = r.data?.text;
             const chatId = r.data?.chatId;
@@ -420,7 +599,45 @@ export function createInterviewSessionJob(
             ) {
               return null;
             }
-            return { data: { text, chatId, sessionId: sId } };
+            const data: IncomingReplyEvent['data'] = {
+              text,
+              chatId,
+              sessionId: sId,
+            };
+            // Narrow each optional discriminator before passing through.
+            const mt = r.data?.messageType;
+            if (mt === 'text' || mt === 'voice' || mt === 'callback') {
+              data.messageType = mt;
+            }
+            const cb = r.data?.callbackData;
+            if (cb !== undefined && cb !== null && typeof cb === 'object') {
+              const cbo = cb as Record<string, unknown>;
+              const qi = cbo['questionIndex'];
+              const ch = cbo['choice'];
+              if (
+                typeof qi === 'number' &&
+                (ch === 'yes' || ch === 'anon' || ch === 'skip')
+              ) {
+                data.callbackData = { questionIndex: qi, choice: ch };
+              }
+            }
+            const tr = r.data?.transcript;
+            if (typeof tr === 'string' || tr === null) {
+              data.transcript = tr;
+            }
+            const au = r.data?.audioUrl;
+            if (typeof au === 'string') {
+              data.audioUrl = au;
+            }
+            const vf = r.data?.voiceFileId;
+            if (typeof vf === 'string') {
+              data.voiceFileId = vf;
+            }
+            const te = r.data?.transcriptionError;
+            if (typeof te === 'string') {
+              data.transcriptionError = te;
+            }
+            return { data };
           },
           fetchFn: fetch,
         },

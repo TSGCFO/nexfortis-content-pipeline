@@ -1,16 +1,18 @@
 /**
- * Unit tests for `readEnv`. Manipulates `process.env` only.
+ * Unit tests for the bot-process env reader. Manipulates `process.env`
+ * only — no other side effects. Mirrors PR 1's `read-env.test.ts` style.
  */
 
 import { afterEach, describe, expect, it } from 'vitest';
 
-import { readEnv } from '../../../artifacts/telegram-bot/src/jobs/interview-session/index.js';
+import { readBotEnv } from '../../../artifacts/telegram-bot/src/bot/env.js';
 import { EnvNotConfiguredError } from '../../../artifacts/telegram-bot/src/jobs/interview-session/errors.js';
 
 const REQUIRED = [
   'DATABASE_URL',
   'TELEGRAM_BOT_TOKEN',
   'TELEGRAM_CHAT_ID',
+  'OPENAI_API_KEY',
   'ANTHROPIC_API_KEY',
 ] as const;
 
@@ -20,79 +22,75 @@ afterEach(() => {
   process.env = { ...ORIGINAL_ENV };
 });
 
-describe('readEnv', () => {
-  it('returns the typed env when all four vars are set', () => {
+describe('readBotEnv', () => {
+  it('returns the typed env when all five vars are set', () => {
     process.env['DATABASE_URL'] = 'postgres://x';
     process.env['TELEGRAM_BOT_TOKEN'] = 'btoken';
     process.env['TELEGRAM_CHAT_ID'] = 'chat';
+    process.env['OPENAI_API_KEY'] = 'okey';
     process.env['ANTHROPIC_API_KEY'] = 'akey';
-    const env = readEnv();
+    const env = readBotEnv();
     expect(env).toEqual({
       databaseUrl: 'postgres://x',
       telegramBotToken: 'btoken',
       telegramChatId: 'chat',
+      openaiApiKey: 'okey',
       anthropicApiKey: 'akey',
     });
   });
 
-  it('throws EnvNotConfiguredError listing only DATABASE_URL when only that is missing', () => {
-    delete process.env['DATABASE_URL'];
-    process.env['TELEGRAM_BOT_TOKEN'] = 'btoken';
-    process.env['TELEGRAM_CHAT_ID'] = 'chat';
-    process.env['ANTHROPIC_API_KEY'] = 'akey';
-    try {
-      readEnv();
-      throw new Error('expected throw');
-    } catch (err) {
-      expect(err).toBeInstanceOf(EnvNotConfiguredError);
-      const e = err as EnvNotConfiguredError;
-      expect(e.code).toBe('ENV_NOT_CONFIGURED');
-      expect(e.missing).toEqual(['DATABASE_URL']);
-      expect(e.message).toMatch(/DATABASE_URL/);
-    }
-  });
-
-  it('throws listing all four when none are set', () => {
+  it('throws EnvNotConfiguredError listing all five when none are set', () => {
     for (const name of REQUIRED) delete process.env[name];
     try {
-      readEnv();
+      readBotEnv();
       throw new Error('expected throw');
     } catch (err) {
       expect(err).toBeInstanceOf(EnvNotConfiguredError);
       const e = err as EnvNotConfiguredError;
-      expect(e.missing).toEqual([
-        'DATABASE_URL',
-        'TELEGRAM_BOT_TOKEN',
-        'TELEGRAM_CHAT_ID',
-        'ANTHROPIC_API_KEY',
-      ]);
+      expect(e.missing).toEqual([...REQUIRED]);
     }
   });
 
-  it('throws when a var is set to an empty string (treated as missing)', () => {
-    process.env['DATABASE_URL'] = 'postgres://x';
-    process.env['TELEGRAM_BOT_TOKEN'] = '';
-    process.env['TELEGRAM_CHAT_ID'] = 'chat';
-    process.env['ANTHROPIC_API_KEY'] = 'akey';
-    try {
-      readEnv();
-      throw new Error('expected throw');
-    } catch (err) {
-      expect(err).toBeInstanceOf(EnvNotConfiguredError);
-      const e = err as EnvNotConfiguredError;
-      expect(e.missing).toEqual(['TELEGRAM_BOT_TOKEN']);
-    }
-  });
-
-  it('does NOT throw when only unrelated vars (OPENAI_API_KEY, INNGEST_EVENT_KEY) are present alongside the four required ones', () => {
+  it('throws listing only ANTHROPIC_API_KEY when only that is missing', () => {
     process.env['DATABASE_URL'] = 'postgres://x';
     process.env['TELEGRAM_BOT_TOKEN'] = 'btoken';
     process.env['TELEGRAM_CHAT_ID'] = 'chat';
+    process.env['OPENAI_API_KEY'] = 'okey';
+    delete process.env['ANTHROPIC_API_KEY'];
+    try {
+      readBotEnv();
+      throw new Error('expected throw');
+    } catch (err) {
+      expect(err).toBeInstanceOf(EnvNotConfiguredError);
+      const e = err as EnvNotConfiguredError;
+      expect(e.missing).toEqual(['ANTHROPIC_API_KEY']);
+    }
+  });
+
+  it('treats empty string as missing', () => {
+    process.env['DATABASE_URL'] = 'postgres://x';
+    process.env['TELEGRAM_BOT_TOKEN'] = 'btoken';
+    process.env['TELEGRAM_CHAT_ID'] = 'chat';
+    process.env['OPENAI_API_KEY'] = '';
     process.env['ANTHROPIC_API_KEY'] = 'akey';
-    process.env['OPENAI_API_KEY'] = 'bar';
-    process.env['INNGEST_EVENT_KEY'] = 'baz';
-    expect(() => readEnv()).not.toThrow();
-    const env = readEnv();
-    expect(env.databaseUrl).toBe('postgres://x');
+    try {
+      readBotEnv();
+      throw new Error('expected throw');
+    } catch (err) {
+      expect(err).toBeInstanceOf(EnvNotConfiguredError);
+      const e = err as EnvNotConfiguredError;
+      expect(e.missing).toEqual(['OPENAI_API_KEY']);
+    }
+  });
+
+  it('does NOT throw when unrelated env vars are also present', () => {
+    process.env['DATABASE_URL'] = 'postgres://x';
+    process.env['TELEGRAM_BOT_TOKEN'] = 'btoken';
+    process.env['TELEGRAM_CHAT_ID'] = 'chat';
+    process.env['OPENAI_API_KEY'] = 'okey';
+    process.env['ANTHROPIC_API_KEY'] = 'akey';
+    process.env['INNGEST_EVENT_KEY'] = 'irrelevant';
+    process.env['SUPABASE_URL'] = 'irrelevant';
+    expect(() => readBotEnv()).not.toThrow();
   });
 });
