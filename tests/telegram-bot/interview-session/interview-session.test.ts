@@ -17,6 +17,7 @@ import type {
   InterviewSessionEnv,
   RunOutcome,
 } from '../../../artifacts/telegram-bot/src/jobs/interview-session/types.js';
+import type { OpusAnthropicLike } from '../../../artifacts/telegram-bot/src/jobs/interview-session/anthropic-shapes.js';
 import type { Logger } from '@ncp/logger';
 import type { Database } from '@ncp/db';
 
@@ -74,11 +75,29 @@ function makeFakeDb(opts: MakeFakeDbOptions): {
   const db = {
     select(_cols: unknown) {
       return {
-        from(_table: unknown) {
+        from(table: unknown) {
+          const tableName = inferTableName(table);
+          if (tableName === 'capture_signals') {
+            // Confirmation-loop's selectSignalsForCluster reads from
+            // capture_signals via .where().orderBy().limit() — return
+            // an empty array so the loop sees `no_signals`.
+            return {
+              where(_w: unknown) {
+                return {
+                  orderBy(_o: unknown) {
+                    return {
+                      limit(_n: number) {
+                        return Promise.resolve([]);
+                      },
+                    };
+                  },
+                };
+              },
+            };
+          }
+          // article_candidates: PR 1's lookup.
           return {
             where(_w: unknown) {
-              // The only `select` in runInterviewSession is from
-              // article_candidates filtered by id.
               return Promise.resolve(state.candidateRows);
             },
           };
@@ -196,6 +215,20 @@ function defaultCandidate(): CandidateRow {
   };
 }
 
+function makeAnthropicMock(): OpusAnthropicLike {
+  // PR 1 tests never reach the confirmation loop's Opus calls because
+  // their candidate has no selectable signals (the fake DB returns
+  // []), but the deps slot must still be populated.
+  return {
+    messages: {
+      create: vi.fn(async () => ({
+        stop_reason: 'end_turn',
+        content: [],
+      })) as unknown as OpusAnthropicLike['messages']['create'],
+    },
+  };
+}
+
 interface MakeDepsOverrides {
   candidateRows?: CandidateRow[];
   sessionId?: string;
@@ -206,6 +239,7 @@ interface MakeDepsOverrides {
   fetchFn?: ReturnType<typeof vi.fn>;
   logger?: MockLogger;
   sendInngestEvent?: ReturnType<typeof vi.fn>;
+  anthropic?: OpusAnthropicLike;
 }
 
 interface BuiltDeps {
@@ -218,6 +252,7 @@ interface BuiltDeps {
     waitForReply: ReturnType<typeof vi.fn>;
     fetchFn: typeof fetch;
     sendInngestEvent: ReturnType<typeof vi.fn>;
+    anthropic: OpusAnthropicLike;
   };
   state: FakeDbState;
   logger: MockLogger;
@@ -246,6 +281,7 @@ function makeDeps(overrides: MakeDepsOverrides = {}): BuiltDeps {
   const fetchFn = overrides.fetchFn ?? makeFetchOk();
   const sendInngestEvent =
     overrides.sendInngestEvent ?? vi.fn(async () => undefined);
+  const anthropic = overrides.anthropic ?? makeAnthropicMock();
   const deps = {
     db,
     logger,
@@ -255,6 +291,7 @@ function makeDeps(overrides: MakeDepsOverrides = {}): BuiltDeps {
     waitForReply,
     fetchFn: fetchFn as unknown as typeof fetch,
     sendInngestEvent,
+    anthropic,
   };
   return {
     deps,
@@ -279,16 +316,22 @@ function getFetchBodies(
 // --- Test cases -----------------------------------------------------------
 
 describe('runInterviewSession', () => {
-  it('happy path: preview acknowledged — full transitions, single fetch, single sleep', async () => {
+  it('happy path: preview acknowledged → confirmation loop → completed', async () => {
+    // The default fake DB returns 0 signals for the cluster (capture_signals
+    // chain yields []), so the confirmation loop short-circuits to
+    // `no_signals` and the orchestrator transitions to `completed` with
+    // confirmedCount=0. The preview message + completion placeholder are
+    // both sent over the same `fetchFn` (2 calls total).
     const { deps, state, sleepUntil, fetchFn } = makeDeps();
 
     const outcome = await runInterviewSession(deps, 'cand-1');
 
     expect(outcome).toEqual({
-      kind: 'preview_acknowledged',
+      kind: 'completed',
       sessionId: 'sess-1',
       candidateId: 'cand-1',
-      replyText: 'ok lets do it',
+      confirmedCount: 0,
+      excludedCount: 0,
     } satisfies RunOutcome);
 
     // sleepUntil called exactly once with the Mon-after-NOW Date.
@@ -298,14 +341,18 @@ describe('runInterviewSession', () => {
       '2026-05-25T12:00:00.000Z',
     );
 
-    // article_candidates updated once to status='awaiting_interview'.
+    // article_candidates updated to status='awaiting_interview' then
+    // 'interview_complete' (2 updates).
     const candidateUpdates = state.updateCalls.filter(
       (u) => u.table === 'article_candidates',
     );
-    expect(candidateUpdates).toHaveLength(1);
-    expect(candidateUpdates[0]!.set).toEqual({ status: 'awaiting_interview' });
+    expect(candidateUpdates.map((u) => u.set)).toEqual([
+      { status: 'awaiting_interview' },
+      { status: 'interview_complete' },
+    ]);
 
-    // interview_sessions inserted once with status='preview_sent'.
+    // interview_sessions inserted once with status='preview_sent', then
+    // updated to completed (+ completedAt timestamp).
     const sessionInserts = state.insertCalls.filter(
       (i) => i.table === 'interview_sessions',
     );
@@ -316,13 +363,22 @@ describe('runInterviewSession', () => {
       status: 'preview_sent',
     });
     expect(sessionInserts[0]!.values['startedAt']).toBeInstanceOf(Date);
+    const sessionUpdates = state.updateCalls.filter(
+      (u) => u.table === 'interview_sessions',
+    );
+    const completedUpdate = sessionUpdates.find(
+      (u) => u.set['status'] === 'completed',
+    );
+    expect(completedUpdate).toBeDefined();
+    expect(completedUpdate!.set['completedAt']).toBeInstanceOf(Date);
 
-    // Exactly one Telegram fetch with the preview body containing the title.
-    expect(fetchFn).toHaveBeenCalledTimes(1);
-    const [body] = getFetchBodies(fetchFn);
-    expect(body!['text']).toContain('Conditional Access for iOS');
-    expect(body!['chat_id']).toBe('CHAT');
-    expect(body!['parse_mode']).toBe('HTML');
+    // Two Telegram fetches: preview + completion placeholder.
+    expect(fetchFn).toHaveBeenCalledTimes(2);
+    const bodies = getFetchBodies(fetchFn);
+    expect(bodies[0]!['text']).toContain('Conditional Access for iOS');
+    expect(bodies[0]!['chat_id']).toBe('CHAT');
+    expect(bodies[0]!['parse_mode']).toBe('HTML');
+    expect(bodies[1]!['text']).toMatch(/I&#39;ve confirmed 0 examples/);
   });
 
   it('/skip path: transitions session+candidate to skipped, sends preview + skip ack', async () => {
@@ -445,55 +501,60 @@ describe('runInterviewSession', () => {
     expect(warnCtx['status']).toBe('archived');
   });
 
-  it('candidate already in awaiting_interview: does NOT update candidate status, still inserts session + sends preview', async () => {
+  it('candidate already in awaiting_interview: does NOT redundantly update status, still inserts session + sends preview, still progresses to completed', async () => {
     const awaiting = { ...defaultCandidate(), status: 'awaiting_interview' };
-    const { deps, state, fetchFn } = makeDeps({ candidateRows: [awaiting] });
+    const { deps, state } = makeDeps({ candidateRows: [awaiting] });
 
     const outcome = await runInterviewSession(deps, 'cand-1');
 
-    expect(outcome.kind).toBe('preview_acknowledged');
+    expect(outcome.kind).toBe('completed');
 
-    // Zero updates to article_candidates (no redundant write).
+    // Exactly ONE article_candidates update — the final transition to
+    // 'interview_complete' from the loop's completion branch. No
+    // redundant 'awaiting_interview' write because the candidate was
+    // already in that state.
     const candidateUpdates = state.updateCalls.filter(
       (u) => u.table === 'article_candidates',
     );
-    expect(candidateUpdates).toHaveLength(0);
+    expect(candidateUpdates).toHaveLength(1);
+    expect(candidateUpdates[0]!.set).toEqual({ status: 'interview_complete' });
 
     // Session was still inserted.
     const sessionInserts = state.insertCalls.filter(
       (i) => i.table === 'interview_sessions',
     );
     expect(sessionInserts).toHaveLength(1);
-
-    // Preview was still sent.
-    expect(fetchFn).toHaveBeenCalledTimes(1);
   });
 
-  it('telegram preview send fails (HTTP 500): does not throw, logs error, continues to wait for reply', async () => {
+  it('telegram preview send fails (HTTP 500): does not throw, logs error, continues to wait for reply, still progresses to completed', async () => {
     const fetchFn = makeFetchSequence(
       { status: 500, body: { ok: false, description: 'internal' } },
-      // any subsequent calls (none expected in happy path) succeed
+      // subsequent calls (completion placeholder) succeed
       { status: 200, body: { ok: true, result: {} } },
     );
     const { deps, state, logger, waitForReply } = makeDeps({ fetchFn });
 
     const outcome = await runInterviewSession(deps, 'cand-1');
 
-    expect(outcome.kind).toBe('preview_acknowledged');
+    expect(outcome.kind).toBe('completed');
     expect(waitForReply).toHaveBeenCalledTimes(1);
 
-    // Session was inserted; candidate was updated to awaiting_interview.
+    // Session was inserted; candidate transitioned through
+    // awaiting_interview → interview_complete (2 updates).
     expect(
       state.insertCalls.filter((i) => i.table === 'interview_sessions'),
     ).toHaveLength(1);
     expect(
       state.updateCalls.filter((u) => u.table === 'article_candidates'),
-    ).toHaveLength(1);
+    ).toHaveLength(2);
 
     // Error log captured the preview failure.
-    expect(logger.error).toHaveBeenCalledTimes(1);
-    const errCtx = logger.error.mock.calls[0]![0] as Record<string, unknown>;
-    expect(errCtx['action']).toBe('preview_send_failed');
+    const previewErr = logger.error.mock.calls.find(
+      (c) =>
+        (c[0] as Record<string, unknown>)['action'] === 'preview_send_failed',
+    );
+    expect(previewErr).toBeDefined();
+    const errCtx = previewErr![0] as Record<string, unknown>;
     expect(String(errCtx['reason'])).toMatch(/500|internal/);
   });
 
@@ -666,7 +727,7 @@ describe('runInterviewSession', () => {
     expect(sendInngestEvent).not.toHaveBeenCalled();
   });
 
-  it('session.opened dispatch failure: warn-logs, does not throw, preview still sends', async () => {
+  it('session.opened dispatch failure: warn-logs, does not throw, preview still sends, session still progresses to completed', async () => {
     const failingDispatch = vi.fn(async () => {
       throw new Error('Inngest dispatch unreachable');
     });
@@ -674,9 +735,7 @@ describe('runInterviewSession', () => {
       sendInngestEvent: failingDispatch,
     });
     const outcome = await runInterviewSession(deps, 'cand-1');
-    // PR 2 happy path still resolves (preview_acknowledged remains in PR 1
-    // tests until Phase G replaces the branch with confirmation-loop wiring).
-    expect(outcome.kind).toBe('preview_acknowledged');
+    expect(outcome.kind).toBe('completed');
     expect(failingDispatch).toHaveBeenCalledTimes(1);
     // Warn logged with the right action.
     const warnCalls = logger.warn.mock.calls;
@@ -686,7 +745,7 @@ describe('runInterviewSession', () => {
         'session_opened_dispatch_failed',
     );
     expect(dispatchWarn).toBeDefined();
-    // Preview send still happened.
+    // Preview send still happened (fetchFn was called for preview + completion).
     expect(fetchFn).toHaveBeenCalled();
   });
 });
