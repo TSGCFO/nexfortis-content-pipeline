@@ -47,9 +47,9 @@ describe('buildCorpusQualityAlertMessage', () => {
 });
 
 describe('buildFollowUpPlaceholderMessage', () => {
-  it('returns the PR 3 placeholder sentinel (not used in PR 2)', () => {
+  it('returns the legacy follow-up placeholder sentinel (superseded by follow-up-loop.ts in PR 3 but retained for export stability)', () => {
     const out = buildFollowUpPlaceholderMessage();
-    expect(out).toContain('PR 3');
+    expect(out).toContain('superseded by follow-up-loop.ts');
   });
 });
 
