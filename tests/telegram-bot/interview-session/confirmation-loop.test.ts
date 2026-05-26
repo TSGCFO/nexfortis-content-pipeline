@@ -326,6 +326,13 @@ describe('runConfirmationLoop', () => {
       kind: 'completed',
       confirmedCount: 3,
       excludedCount: 0,
+      // PR 3 backport — all answers were 'yes', none were 'skip'.
+      allConfirmationsSkipped: false,
+      confirmedSignals: [
+        { id: 's1', redactedText: signals[0]!.redactedText, source: 'claude', capturedAt: signals[0]!.capturedAt },
+        { id: 's2', redactedText: signals[1]!.redactedText, source: 'claude', capturedAt: signals[1]!.capturedAt },
+        { id: 's3', redactedText: signals[2]!.redactedText, source: 'claude', capturedAt: signals[2]!.capturedAt },
+      ],
     });
     // 3 question sends + 0 alerts = 3 fetches
     expect(built.fetchFn).toHaveBeenCalledTimes(3);
@@ -369,6 +376,11 @@ describe('runConfirmationLoop', () => {
       kind: 'completed',
       confirmedCount: 1,
       excludedCount: 1,
+      // PR 3 backport — only one question sent, answered 'yes'.
+      allConfirmationsSkipped: false,
+      confirmedSignals: [
+        { id: 's2', redactedText: expect.any(String), source: 'claude', capturedAt: expect.any(Date) },
+      ],
     });
     // Exactly one question sent (signal s2) + zero alert (only 1 exclusion)
     expect(built.fetchFn).toHaveBeenCalledTimes(1);
@@ -407,6 +419,10 @@ describe('runConfirmationLoop', () => {
       kind: 'completed',
       confirmedCount: 1,
       excludedCount: 0,
+      allConfirmationsSkipped: false,
+      confirmedSignals: [
+        { id: 's1', redactedText: expect.any(String), source: 'claude', capturedAt: expect.any(Date) },
+      ],
     });
     expect(built.generateQuestionFn).toHaveBeenCalledTimes(2);
     // The 2nd call carries a retryReason hint
@@ -437,6 +453,9 @@ describe('runConfirmationLoop', () => {
       kind: 'completed',
       confirmedCount: 0,
       excludedCount: 1,
+      // PR 3 backport — zero questions sent → not "all skipped".
+      allConfirmationsSkipped: false,
+      confirmedSignals: [],
     });
     // No questions sent (only signal was excluded)
     expect(built.fetchFn).toHaveBeenCalledTimes(0);
@@ -550,6 +569,11 @@ describe('runConfirmationLoop', () => {
       kind: 'completed',
       confirmedCount: 1,
       excludedCount: 0,
+      // PR 3 backport — `anon` does NOT count as a skip.
+      allConfirmationsSkipped: false,
+      confirmedSignals: [
+        { id: 's1', redactedText: expect.any(String), source: 'claude', capturedAt: expect.any(Date) },
+      ],
     });
     const lastAnswerUpdate = built.state.updateCalls
       .filter(
@@ -575,6 +599,11 @@ describe('runConfirmationLoop', () => {
       kind: 'completed',
       confirmedCount: 1,
       excludedCount: 0,
+      // PR 3 backport — 1 skip + 1 yes ≠ all skipped.
+      allConfirmationsSkipped: false,
+      confirmedSignals: [
+        { id: 's2', redactedText: expect.any(String), source: 'claude', capturedAt: expect.any(Date) },
+      ],
     });
     const lastAnswerUpdate = built.state.updateCalls
       .filter(
@@ -645,5 +674,84 @@ describe('runConfirmationLoop', () => {
     expect(built.generateQuestionFn).not.toHaveBeenCalled();
     expect(built.waitForReply).not.toHaveBeenCalled();
     expect(built.fetchFn).not.toHaveBeenCalled();
+  });
+
+  // ───────────────────────────────────────────────────────────────────────
+  // PR 3 backport: allConfirmationsSkipped + confirmedSignals
+  // ───────────────────────────────────────────────────────────────────────
+
+  it('allConfirmationsSkipped is true when every confirmation question received "skip"', async () => {
+    const signals = [sig('s1'), sig('s2'), sig('s3')];
+    const built = makeDeps({
+      signals,
+      generateOutputs: signals.map((s) => ({
+        ok: true as const,
+        question: goodQuestion(s.id),
+      })),
+      replies: [
+        callbackReply(1, 'skip'),
+        callbackReply(2, 'skip'),
+        callbackReply(3, 'skip'),
+      ],
+    });
+    const outcome = await runConfirmationLoop(
+      built.deps,
+      ctx(['s1', 's2', 's3']),
+    );
+    expect(outcome).toMatchObject<Partial<ConfirmationLoopOutcome>>({
+      kind: 'completed',
+      confirmedCount: 0,
+      excludedCount: 0,
+      allConfirmationsSkipped: true,
+      confirmedSignals: [],
+    });
+  });
+
+  it('allConfirmationsSkipped is false when at least one answer is not "skip"', async () => {
+    const signals = [sig('s1'), sig('s2'), sig('s3')];
+    const built = makeDeps({
+      signals,
+      generateOutputs: signals.map((s) => ({
+        ok: true as const,
+        question: goodQuestion(s.id),
+      })),
+      replies: [
+        callbackReply(1, 'skip'),
+        callbackReply(2, 'yes'),
+        callbackReply(3, 'skip'),
+      ],
+    });
+    const outcome = await runConfirmationLoop(
+      built.deps,
+      ctx(['s1', 's2', 's3']),
+    );
+    expect(outcome).toMatchObject<Partial<ConfirmationLoopOutcome>>({
+      kind: 'completed',
+      confirmedCount: 1,
+      allConfirmationsSkipped: false,
+    });
+    if (outcome.kind === 'completed') {
+      expect(outcome.confirmedSignals).toHaveLength(1);
+      expect(outcome.confirmedSignals[0]!.id).toBe('s2');
+    }
+  });
+
+  it('allConfirmationsSkipped is false when zero questions were sent (empty loop)', async () => {
+    // All signals excluded at phase 1 → no questions sent at all.
+    const built = makeDeps({
+      signals: [sig('s1')],
+      generateOutputs: [
+        { ok: false, reason: 'no_specifics' },
+      ],
+      replies: [],
+    });
+    const outcome = await runConfirmationLoop(built.deps, ctx(['s1']));
+    expect(outcome).toMatchObject<Partial<ConfirmationLoopOutcome>>({
+      kind: 'completed',
+      confirmedCount: 0,
+      excludedCount: 1,
+      allConfirmationsSkipped: false,
+      confirmedSignals: [],
+    });
   });
 });

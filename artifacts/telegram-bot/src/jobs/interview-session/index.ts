@@ -416,6 +416,9 @@ export async function runInterviewSession(
         candidateId,
         confirmedCount,
         excludedCount,
+        followUpsAnswered: 0,
+        fallbackAnswered: false,
+        closingSummarySource: 'fallback',
       };
     }
   }

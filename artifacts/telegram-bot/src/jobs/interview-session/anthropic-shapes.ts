@@ -28,7 +28,7 @@
  * caching), 7 (stop-reason handling).
  */
 
-import type { QuestionResponse } from './types.js';
+import type { ClosingSummary, FollowUpQuestion, QuestionResponse } from './types.js';
 
 // ─────────────────────────────────────────────────────────────────────────
 // Structural Opus 4.7 client interface (wider than @anthropic-ai/sdk@0.28
@@ -188,4 +188,95 @@ export function parseQuestionResponse(text: string): QuestionResponse | null {
     detected_specifics,
     no_specifics,
   };
+}
+
+// ─────────────────────────────────────────────────────────────────────────
+// PR 3 — Opus 4.7 follow-up question schema + parser.
+// ─────────────────────────────────────────────────────────────────────────
+//
+// Smaller surface than the confirmation-question schema: the follow-up
+// is open-ended (no buttons, no specifics list, no NO_SPECIFICS branch)
+// and only needs the question text plus a verbatim evidence phrase so we
+// can defend against fully invented follow-ups.
+
+export const FOLLOW_UP_JSON_SCHEMA = {
+  type: 'object',
+  additionalProperties: false,
+  required: ['follow_up_text', 'evidence_phrase'],
+  properties: {
+    follow_up_text: {
+      type: 'string',
+      description:
+        'One open-ended follow-up question for Hassan. Anchors on a concrete detail already present in the cluster context, asks an open-ended question that probes the SERP gap the orchestrator passed in. Second person, plain-spoken, ≤80 words.',
+    },
+    evidence_phrase: {
+      type: 'string',
+      description:
+        'A short verbatim substring (≤120 chars) of one signal in the cluster context that the follow-up is anchored to. Must appear in that signal exactly as you copied it; the orchestrator uses this as a regression check that the question is grounded in real corpus content.',
+    },
+  },
+} as const;
+
+export function parseFollowUpResponse(text: string): FollowUpQuestion | null {
+  let raw: unknown;
+  try {
+    raw = JSON.parse(text);
+  } catch {
+    return null;
+  }
+  if (raw === null || typeof raw !== 'object' || Array.isArray(raw)) {
+    return null;
+  }
+  const obj = raw as Record<string, unknown>;
+  const follow_up_text = obj['follow_up_text'];
+  const evidence_phrase = obj['evidence_phrase'];
+  if (
+    typeof follow_up_text !== 'string' ||
+    typeof evidence_phrase !== 'string'
+  ) {
+    return null;
+  }
+  return { follow_up_text, evidence_phrase };
+}
+
+// ─────────────────────────────────────────────────────────────────────────
+// PR 3 — Haiku 4.5 closing-summary schema + parser.
+// ─────────────────────────────────────────────────────────────────────────
+//
+// Single string field. Per Anthropic docs (verified May 2026), Haiku 4.5
+// supports `output_config.format = { type: 'json_schema', schema }` —
+// GA Jan 2026; no beta header needed.
+// https://docs.claude.com/en/docs/build-with-claude/structured-outputs
+
+export const CLOSING_SUMMARY_JSON_SCHEMA = {
+  type: 'object',
+  additionalProperties: false,
+  required: ['summary_text'],
+  properties: {
+    summary_text: {
+      type: 'string',
+      description:
+        'A 1-2 sentence closing acknowledgement for Hassan that paraphrases the session state and confirms when the draft will be ready. Plain-spoken, no corporate softeners. Uses the draft_day_name field verbatim. ≤300 chars.',
+    },
+  },
+} as const;
+
+export function parseClosingSummaryResponse(
+  text: string,
+): ClosingSummary | null {
+  let raw: unknown;
+  try {
+    raw = JSON.parse(text);
+  } catch {
+    return null;
+  }
+  if (raw === null || typeof raw !== 'object' || Array.isArray(raw)) {
+    return null;
+  }
+  const obj = raw as Record<string, unknown>;
+  const summary_text = obj['summary_text'];
+  if (typeof summary_text !== 'string') {
+    return null;
+  }
+  return { summary_text };
 }
