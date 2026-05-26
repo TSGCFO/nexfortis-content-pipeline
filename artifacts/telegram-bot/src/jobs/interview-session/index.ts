@@ -279,9 +279,9 @@ export async function runInterviewSession(
   // The dispatch is best-effort: a failed send must not orphan the
   // already-inserted session row (which would otherwise leak into the
   // pipeline without ever being interviewable).
-  // TODO(pr3): once mid-session command handlers (/status, /help,
-  // /delete_signal) and the 48-hour reminder scheduler land, the
-  // dispatch will also need to seed scheduler entries.
+  // PR 3 (resolved): scheduler entries are now seeded in-line via
+  // `deps.scheduleReminder` (parallel step.sleep + step.run) — no
+  // additional Inngest event dispatch coupling needed.
   try {
     await deps.sendInngestEvent({
       name: 'interview.session.opened',
