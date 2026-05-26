@@ -461,6 +461,18 @@ export async function runInterviewSession(
         .where(eq(articleCandidates.id, candidateId));
       serpGaps = candidateRows[0]?.serpGaps ?? null;
     } catch (err) {
+      // Deliberate trade-off: a transient DB read failure silently
+      // downgrades this session from "with follow-up" to "without
+      // follow-up". We prefer that to crashing the interview mid-flow,
+      // because:
+      //   - Hassan has already confirmed the signals; the article can
+      //     still be drafted from those alone (just without SERP-gap
+      //     coverage).
+      //   - Crashing here would lose the confirmation work already done.
+      //   - The next weekly cycle will re-surface uncovered gaps as a
+      //     new candidate if they remain relevant.
+      // If the synthesis worker stops accepting candidates with
+      // uncovered SERP gaps in v2.1, revisit this decision.
       deps.logger.warn(
         {
           source: SOURCE,
@@ -468,7 +480,7 @@ export async function runInterviewSession(
           sessionId,
           reason: err instanceof Error ? err.message : String(err),
         },
-        'serp_gaps read failed; follow-up loop skipped',
+        'serp_gaps read failed; downgrading session to no-follow-up rather than crashing',
       );
     }
     if (serpGaps !== null && serpGaps.length > 0) {
@@ -740,6 +752,14 @@ export function createInterviewSessionJob(
             await step.sendEvent('open-session', payload);
           },
           // PR 3: scheduled reminder via durable step.sleep + step.run.
+          //
+          // Belt-and-suspenders defence — `runReminderStep` is itself
+          // wrapped in try/catch internally so it never throws, but the
+          // outer Promise.all branch (in the orchestrator body) rejects
+          // on the first child rejection. If a future refactor of
+          // `reminder.ts` accidentally leaks an exception, the `.catch`
+          // below swallows it so the entire `runInterviewSession`
+          // invocation does not fail because of a reminder hiccup.
           scheduleReminder: async ({ sessionId, proposedTitle }) => {
             await step.sleep('reminder-delay', '48h');
             await step.run('reminder-check-and-send', async () => {
@@ -755,7 +775,17 @@ export function createInterviewSessionJob(
                   sleep: async () => undefined,
                 },
                 { sessionId, proposedTitle },
-              );
+              ).catch((err: unknown) => {
+                logger.error(
+                  {
+                    source: SOURCE,
+                    action: 'reminder_promise_rejected',
+                    sessionId,
+                    reason: err instanceof Error ? err.message : String(err),
+                  },
+                  'runReminderStep unexpectedly rejected; swallowing so the main interview flow continues',
+                );
+              });
             });
           },
           waitForReply: async (sessionId, timeoutMs) => {

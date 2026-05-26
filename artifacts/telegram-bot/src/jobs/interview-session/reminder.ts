@@ -6,14 +6,19 @@
  * false, send Hassan exactly one reminder and flip the flag.
  *
  * Idempotency contract:
- *   - Re-running the same step over and over MUST never produce a
- *     second reminder.
- *   - The flag flip is the source of truth — even if the Telegram send
- *     succeeded but the flag write failed on the previous attempt, we
- *     accept the small risk of a second reminder rather than the much
- *     larger UX hit of NEVER sending one. (The current implementation
- *     only flips on send success, so the worst-case under flap is one
- *     extra reminder per session, which is still bounded.)
+ *   - `step.sleep` fires exactly once per Inngest invocation, so this
+ *     function runs at most once per session.
+ *   - On entry the function re-reads the session and short-circuits if
+ *     `reminder_sent === true` (see the flag-check branch below) OR if
+ *     the session is in a terminal status (see the status-check branch),
+ *     so even a manual re-invocation would no-op.
+ *   - The flag flip happens ONLY after a successful Telegram send. If
+ *     the Telegram send succeeded but the flag write threw, a *next*
+ *     invocation (if one ever happened) would see
+ *     `reminder_sent: false` and could re-send. In the current
+ *     architecture this is impossible because `step.sleep` doesn't
+ *     re-fire. If a future refactor moves the reminder into a
+ *     separately-scheduled Inngest function, revisit this contract.
  *
  * Where it lives:
  *   - Inside the main `interview-session` Inngest function. The factory
