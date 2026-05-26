@@ -53,6 +53,16 @@ export type RunOutcome =
       candidateId: string;
       confirmedCount: number;
       excludedCount: number;
+      /** PR 3: count of follow-up questions Hassan actually answered
+       *  (0 when no SERP gaps were uncovered OR the fallback branch ran). */
+      followUpsAnswered: number;
+      /** PR 3: true when the all-skipped fallback branch ran AND Hassan
+       *  responded to its single open-ended question. */
+      fallbackAnswered: boolean;
+      /** PR 3: which path produced the closing-summary text. `'haiku'`
+       *  when Claude Haiku 4.5 returned a valid summary; `'fallback'`
+       *  when the hardcoded placeholder text was used. */
+      closingSummarySource: 'haiku' | 'fallback';
     };
 
 /** Result of an attempted Telegram `sendMessage` call. Never throws. */
@@ -167,12 +177,105 @@ export type QualityGateResult =
   | { ok: true }
   | { ok: false; failures: QualityGateFailure[] };
 
-/** Discriminated outcome of `runConfirmationLoop`. */
+/** Discriminated outcome of `runConfirmationLoop`.
+ *
+ * PR 3 backport: the `completed` variant exposes two extra fields the
+ * outer wrapper needs to decide which post-confirmation branch (fallback
+ * vs. follow-up vs. straight-to-summary) to take.
+ *
+ *  - `allConfirmationsSkipped` — true when ≥1 confirmation question
+ *    was actually asked AND every single one received a `skip` answer
+ *    (PRD §7.2 / AC-F2-07). Empty-loop returns false.
+ *  - `confirmedSignals` — the signals whose response was `yes` or
+ *    `anon`. PR 3's follow-up loop reads `redactedText` from each to
+ *    compute SERP-gap coverage via `serp-gap-coverage.ts`.
+ */
 export type ConfirmationLoopOutcome =
   | {
       kind: 'completed';
       confirmedCount: number;
       excludedCount: number;
+      allConfirmationsSkipped: boolean;
+      confirmedSignals: ConfirmedSignalSummary[];
     }
   | { kind: 'timed_out' }
   | { kind: 'no_signals' };
+
+/** Minimal projection of a confirmed signal carried into the follow-up
+ *  loop — only the fields used for SERP-gap coverage. Keeps the surface
+ *  decoupled from `SelectedSignal` (which lives in `lib/`). */
+export interface ConfirmedSignalSummary {
+  id: string;
+  redactedText: string;
+  source: string;
+  capturedAt: Date;
+}
+
+// ─────────────────────────────────────────────────────────────────────────
+// PR 3 — follow-up + fallback + closing summary + reminder + commands
+// ─────────────────────────────────────────────────────────────────────────
+
+/** `interview_sessions.answers[n].question_type` discriminator, set by
+ *  the follow-up and fallback loops. Stored as an extra JSONB field —
+ *  the lib/db `InterviewAnswer` interface omits it for now (a future
+ *  schema PR can promote it). */
+export type AnswerQuestionType = 'confirmation' | 'follow_up' | 'fallback';
+
+/** Structured JSON object returned by Claude Opus 4.7 for each
+ *  follow-up call. Schema-constrained at the API; post-validated by
+ *  `parseFollowUpResponse` in `anthropic-shapes.ts`. */
+export interface FollowUpQuestion {
+  follow_up_text: string;
+  evidence_phrase: string;
+}
+
+/** Discriminated outcome of one `generateFollowUp` call. */
+export type FollowUpGenerationResult =
+  | { ok: true; question: FollowUpQuestion }
+  | {
+      ok: false;
+      reason: 'no_gaps' | 'api_error';
+      detail?: string;
+    };
+
+/** Discriminated outcome of the follow-up loop. */
+export type FollowUpLoopOutcome =
+  | { kind: 'completed'; followUpsAnswered: number }
+  | { kind: 'timed_out' };
+
+/** Discriminated outcome of the all-skipped fallback loop. */
+export type FallbackLoopOutcome =
+  | { kind: 'completed' }
+  | { kind: 'timed_out' };
+
+/** Structured JSON object returned by Claude Haiku 4.5 for the closing
+ *  summary. Schema-constrained at the API; post-validated by
+ *  `parseClosingSummaryResponse`. */
+export interface ClosingSummary {
+  summary_text: string;
+}
+
+/** Discriminated outcome of `generateClosingSummary`. `fallbackText`
+ *  is always populated so the orchestrator can always send SOMETHING. */
+export type ClosingSummaryResult =
+  | { ok: true; summaryText: string }
+  | {
+      ok: false;
+      reason: 'api_error' | 'schema_mismatch' | 'refusal' | 'truncated';
+      detail?: string;
+      fallbackText: string;
+    };
+
+/** Read-only snapshot consumed by `/status` command's pure formatter. */
+export interface StatusSnapshot {
+  signalsLast7Days: number;
+  lastSynthesisAt: Date | null;
+  activeCandidate:
+    | {
+        proposedTitle: string;
+        status: string;
+      }
+    | null;
+  activeSessionStatus: string | null;
+  questionsSentThisSession: number;
+}

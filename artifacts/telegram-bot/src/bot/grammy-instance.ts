@@ -21,6 +21,7 @@
 
 import { Bot } from 'grammy';
 
+import type { Database } from '@ncp/db';
 import type { Logger } from '@ncp/logger';
 
 import type { OpenAIWhisperLike } from '../lib/whisper-client.js';
@@ -28,7 +29,10 @@ import {
   createCallbackHandler,
   type CallbackSendInngestFn,
 } from './handlers/callback.js';
-import { registerCommands } from './handlers/commands.js';
+import {
+  registerCommands,
+  type SkipCommandSendInngestFn,
+} from './handlers/commands.js';
 import {
   createTextHandler,
   type SendInngestEventFn as TextSendInngestEventFn,
@@ -47,7 +51,8 @@ import type { SessionMap } from './session-map.js';
 export type AnyTelegramReceivedPayload =
   | Parameters<TextSendInngestEventFn>[0]
   | Parameters<VoiceHandlerSendInngestFn>[0]
-  | Parameters<CallbackSendInngestFn>[0];
+  | Parameters<CallbackSendInngestFn>[0]
+  | Parameters<SkipCommandSendInngestFn>[0];
 
 export interface CreateBotDeps {
   token: string;
@@ -56,6 +61,12 @@ export interface CreateBotDeps {
   openai: OpenAIWhisperLike;
   openaiApiKey: string;
   logger: Logger;
+  /** PR 3: needed by `/status` (read-only DB snapshot) and
+   *  `/delete_signal` (soft-delete). */
+  db: Database;
+  /** PR 3: Hassan's chat id (env-derived) — outbound replies go to this
+   *  chat regardless of the inbound chat. */
+  chatId: string;
 }
 
 export function createBot(deps: CreateBotDeps): Bot {
@@ -81,9 +92,20 @@ export function createBot(deps: CreateBotDeps): Bot {
     logger: deps.logger,
   });
 
-  // Register `/skip` first so grammY's command parser dispatches it
-  // ahead of the generic text handler.
-  registerCommands(bot, { textHandler: textHandler as (ctx: unknown) => Promise<void>, logger: deps.logger });
+  // Register the PR 3 command surface. grammY's command parser fires
+  // BEFORE the `message:text` listener, and the text handler's
+  // `startsWith('/')` early-return prevents commands from being
+  // double-dispatched as text answers to the active confirmation
+  // question.
+  registerCommands(bot, {
+    db: deps.db,
+    logger: deps.logger,
+    sessionMap: deps.sessionMap,
+    sendInngestEvent:
+      deps.sendInngestEvent as unknown as SkipCommandSendInngestFn,
+    token: deps.token,
+    chatId: deps.chatId,
+  });
 
   bot.on('message:text', async (ctx) => {
     await textHandler(ctx);

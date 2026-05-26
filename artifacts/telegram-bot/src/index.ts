@@ -24,6 +24,7 @@ import { Inngest } from 'inngest';
 import { createLogger } from '@ncp/logger';
 
 import { SessionMap } from './bot/session-map.js';
+import { createHandleSkipCommandJob } from './jobs/interview-session/handle-skip-command.js';
 import { createInterviewSessionJob } from './jobs/interview-session/index.js';
 import { createRecordSessionOpenedJob } from './jobs/interview-session/jobs-record-session-opened.js';
 
@@ -47,9 +48,18 @@ export const recordSessionOpenedJob = createRecordSessionOpenedJob({
   sessionMap,
 });
 
+/**
+ * PR 3: sibling Inngest function that handles mid-session `/skip`
+ * commands. Triggered by `interview.session.command.skip` events from
+ * the grammY command handler — idempotently flips the session to
+ * `skipped` and sends the ack message.
+ */
+export const handleSkipCommandJob = createHandleSkipCommandJob(inngest);
+
 export const inngestFunctions = [
   interviewSessionJob,
   recordSessionOpenedJob,
+  handleSkipCommandJob,
 ];
 
 logger.debug(

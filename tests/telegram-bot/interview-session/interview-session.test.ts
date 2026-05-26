@@ -332,6 +332,13 @@ describe('runInterviewSession', () => {
       candidateId: 'cand-1',
       confirmedCount: 0,
       excludedCount: 0,
+      // PR 3 extensions — values reflect the current (intermediate)
+      // wiring: the orchestrator still emits the hardcoded placeholder
+      // when no follow-up / fallback branch runs. Updated as the
+      // post-confirmation branches land.
+      followUpsAnswered: 0,
+      fallbackAnswered: false,
+      closingSummarySource: 'fallback',
     } satisfies RunOutcome);
 
     // sleepUntil called exactly once with the Mon-after-NOW Date.

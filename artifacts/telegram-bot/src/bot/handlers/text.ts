@@ -66,6 +66,13 @@ export function createTextHandler(
         // not interview answers.
         return;
       }
+      // PR 3: messages starting with '/' are commands. grammY's command
+      // router handles them separately (see `bot/handlers/commands.ts`).
+      // Early-return so a /status or /skip mid-session does NOT get
+      // dispatched as a text answer to the active confirmation question.
+      if (text.startsWith('/')) {
+        return;
+      }
       const chatId = String(chatRaw);
       const active = deps.sessionMap.getActiveSessionForChat(chatId);
       if (active === undefined) {

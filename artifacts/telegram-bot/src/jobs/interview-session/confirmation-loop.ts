@@ -60,6 +60,7 @@ import {
 import { qualityGate } from './quality-gate.js';
 import type {
   ConfirmationLoopOutcome,
+  ConfirmedSignalSummary,
   IncomingReplyEvent,
   InterviewSessionEnv,
   QuestionResponse,
@@ -287,6 +288,20 @@ interface LoopState {
   questions: InterviewQuestion[];
   answers: InterviewAnswer[];
   confirmedChunkIds: string[];
+  /**
+   * PR 3 backport: signals whose final answer was `yes` or `anon`.
+   * Surfaced to the orchestrator so the follow-up loop can compute
+   * SERP-gap coverage without re-querying capture_signals.
+   */
+  confirmedSignals: ConfirmedSignalSummary[];
+  /**
+   * PR 3 backport: count of confirmation questions whose final answer
+   * was `skip`. Drives the all-skipped fallback branch (PRD §7.2 /
+   * AC-F2-07). Voice/text answers do NOT increment — only an explicit
+   * `skip` callback. A failed-transcription voice-only recording also
+   * does NOT increment.
+   */
+  skipAnswerCount: number;
 }
 
 async function persistQuestion(
@@ -424,6 +439,8 @@ async function runPhase2(
     questions: [],
     answers: [],
     confirmedChunkIds: [],
+    confirmedSignals: [],
+    skipAnswerCount: 0,
   };
 
   for (let i = 0; i < survivors.length; i++) {
@@ -537,19 +554,38 @@ async function runPhase2(
     state.answers.push(recorded.answer);
     if (recorded.confirmsSignal) {
       state.confirmedChunkIds.push(signal.id);
+      // PR 3 backport: capture the minimal signal projection so the
+      // follow-up loop can compute SERP-gap coverage without re-reading
+      // capture_signals.
+      state.confirmedSignals.push({
+        id: signal.id,
+        redactedText: signal.redactedText,
+        source: signal.source,
+        capturedAt: signal.capturedAt,
+      });
+    } else if (recorded.answer.response === 'skip') {
+      // PR 3 backport: drives the all-skipped fallback branch
+      // (PRD §7.2 / AC-F2-07). Voice/text answers do NOT increment —
+      // only an explicit `skip` callback.
+      state.skipAnswerCount += 1;
     }
     await persistAnswer(deps, ctx.sessionId, state);
   }
 
-  // TODO(pr3): follow-up question loop entry point — when PR 3 adds the
-  // PRD §4.4 SERP-gap follow-up flow, branch here on whether the
-  // candidate's serp_gaps are covered by `confirmed_chunk_ids` and emit
-  // 1–2 open-ended follow-up questions before returning `completed`.
+  // PR 3 backport: the outer wrapper uses `allConfirmationsSkipped` to
+  // decide whether to trigger the all-skipped fallback flow (PRD §7.2);
+  // otherwise it consults `confirmedSignals` (via `serp-gap-coverage`)
+  // to decide whether to run the follow-up loop (PRD §4.4). The
+  // resolved follow-up branch is wired in `runInterviewSession`.
+  const allConfirmationsSkipped =
+    survivors.length > 0 && state.skipAnswerCount === survivors.length;
   return {
     outcome: {
       kind: 'completed',
       confirmedCount: state.confirmedChunkIds.length,
       excludedCount: 0, // overwritten by caller using phase1 exclusions
+      allConfirmationsSkipped,
+      confirmedSignals: state.confirmedSignals,
     },
     state,
   };
@@ -632,6 +668,10 @@ export async function runConfirmationLoop(
       kind: 'completed',
       confirmedCount: 0,
       excludedCount: phase1.exclusions.length,
+      // PR 3 backport: zero questions sent means "no skips happened",
+      // not "all skipped". Bypass the fallback branch.
+      allConfirmationsSkipped: false,
+      confirmedSignals: [],
     };
   }
 
@@ -641,11 +681,22 @@ export async function runConfirmationLoop(
   if (phase2.outcome.kind === 'timed_out') {
     return phase2.outcome;
   }
-  // Stitch in the phase 1 exclusion count.
+  if (phase2.outcome.kind === 'no_signals') {
+    // Phase 2 never returns 'no_signals' (the entry-point already
+    // handled the zero-signals case), but TypeScript can't narrow that
+    // — guard defensively so the discriminated-union access below stays
+    // sound under future refactors.
+    return phase2.outcome;
+  }
+  // Stitch in the phase 1 exclusion count, preserving the PR 3
+  // backport fields (allConfirmationsSkipped + confirmedSignals)
+  // computed inside phase 2.
   return {
     kind: 'completed',
     confirmedCount: phase2.state.confirmedChunkIds.length,
     excludedCount: phase1.exclusions.length,
+    allConfirmationsSkipped: phase2.outcome.allConfirmationsSkipped,
+    confirmedSignals: phase2.state.confirmedSignals,
   };
 }
 

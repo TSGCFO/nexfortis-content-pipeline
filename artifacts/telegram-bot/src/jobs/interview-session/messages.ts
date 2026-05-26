@@ -31,10 +31,11 @@ export interface CompletionPlaceholderInput {
 export function buildCompletionPlaceholderMessage(
   input: CompletionPlaceholderInput,
 ): string {
-  // TODO(pr3): replace this hardcoded text with a Claude Haiku-generated
-  // summary computed from `interview_sessions.confirmed_chunk_ids` and
-  // the candidate's primary_keyword (PRD §4.5 / §7.1 — Haiku is the
-  // model assigned to the closing summary per the integration guide §1).
+  // PR 3 (resolved): this is now the FALLBACK message —
+  // `generateClosingSummary` (Haiku 4.5) produces the primary closing
+  // summary; only when Haiku errors do we fall back to this hardcoded
+  // text. See `generate-closing-summary.ts::buildFallbackSummary` for
+  // the wiring.
   const count = Number.isFinite(input.confirmedCount)
     ? Math.max(0, Math.floor(input.confirmedCount))
     : 0;
@@ -54,11 +55,11 @@ export function buildCorpusQualityAlertMessage(): string {
 }
 
 export function buildFollowUpPlaceholderMessage(): string {
-  // TODO(pr3): replace with the real PRD §4.4 open-ended follow-up
-  // message ("One more thing — the top-ranking articles on
-  // <primary_keyword> don't cover <SERP gap topic>. From your
-  // experience, <specific open-ended question>?").
-  return '<follow-up placeholder — PR 3 will replace this>';
+  // PR 3 (resolved): the follow-up loop (`follow-up-loop.ts`) formats
+  // the real PRD §4.4 message inline; this stub is retained only for
+  // export stability — callers should prefer the inline formatter in
+  // the follow-up loop.
+  return '<follow-up placeholder — superseded by follow-up-loop.ts>';
 }
 
 export function buildVoiceTranscriptionFailureMessage(): string {

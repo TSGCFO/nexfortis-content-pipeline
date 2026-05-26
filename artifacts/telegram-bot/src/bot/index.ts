@@ -75,6 +75,9 @@ export async function startBot(
     openai,
     openaiApiKey: env.openaiApiKey,
     logger,
+    // PR 3: `/status` reads from the DB, `/delete_signal` writes to it.
+    db,
+    chatId: env.telegramChatId,
   });
 
   // Fire-and-forget — grammY's long-poll runner blocks indefinitely.
