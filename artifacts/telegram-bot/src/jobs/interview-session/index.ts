@@ -71,10 +71,15 @@ import type { OpusAnthropicLike } from './anthropic-shapes.js';
 import { buildPreviewMessage } from './build-preview-message.js';
 import { buildSkipAckMessage } from './build-skip-ack-message.js';
 import { buildTimeoutMessage } from './build-timeout-message.js';
+import { nextDraftDay } from './business-day.js';
 import { runConfirmationLoop } from './confirmation-loop.js';
 import { EnvNotConfiguredError } from './errors.js';
+import { runFallbackLoop } from './fallback-loop.js';
+import { runFollowUpLoop } from './follow-up-loop.js';
+import { generateClosingSummary } from './generate-closing-summary.js';
 import { buildCompletionPlaceholderMessage } from './messages.js';
 import { nextMondayAt8amEastern } from './next-monday-eastern.js';
+import { runReminderStep } from './reminder.js';
 import { sendTelegramMessage } from './send-telegram-message.js';
 import type {
   IncomingReplyEvent,
@@ -178,6 +183,16 @@ export interface RunInterviewSessionDeps {
   anthropic: OpusAnthropicLike;
   /** Injectable for tests. Defaults to global `fetch`. */
   fetchFn?: typeof fetch;
+  /** PR 3: scheduled reminder runner — wired to step.sleep + step.run. */
+  scheduleReminder?: (input: {
+    sessionId: string;
+    proposedTitle: string;
+  }) => Promise<void>;
+  /** PR 3: DI hooks for the follow-up / fallback / closing-summary
+   *  branches. Production wiring leaves them undefined. */
+  runFollowUpLoopFn?: typeof runFollowUpLoop;
+  runFallbackLoopFn?: typeof runFallbackLoop;
+  generateClosingSummaryFn?: typeof generateClosingSummary;
 }
 
 /**
@@ -318,7 +333,27 @@ export async function runInterviewSession(
     );
   }
 
-  // 7. Wait for Hassan's reply (or 7-day timeout).
+  // 7. Schedule the 48-hour soft reminder IN PARALLEL with the reply
+  // wait (PRD §4.7 / AC-F2-05).
+  const reminderPromise: Promise<void> =
+    deps.scheduleReminder !== undefined
+      ? deps.scheduleReminder({
+          sessionId,
+          proposedTitle: candidate.proposedTitle,
+        }).catch((err: unknown) => {
+          deps.logger.warn(
+            {
+              source: SOURCE,
+              action: 'reminder_schedule_threw',
+              sessionId,
+              reason: err instanceof Error ? err.message : String(err),
+            },
+            'reminder schedule threw; ignoring',
+          );
+        })
+      : Promise.resolve();
+
+  // 8. Wait for Hassan's reply (or 7-day timeout).
   const reply = await deps.waitForReply(sessionId, SEVEN_DAYS_MS);
 
   // 8. Resolve terminal branch.
@@ -366,62 +401,217 @@ export async function runInterviewSession(
   );
 
   // 10. Resolve the loop outcome to a terminal RunOutcome.
-  switch (loopOutcome.kind) {
-    case 'timed_out':
-      // The confirmation loop already transitioned session→timed_out +
-      // candidate→archived and sent the timeout message. Just bubble up.
-      return { kind: 'timed_out', sessionId, candidateId };
-    case 'no_signals':
-      // The candidate had no selectable signals — treat like a clean
-      // completion with zero confirmations rather than abandoning the
-      // session row in `preview_sent`. The placeholder send happens via
-      // the same path as `completed`.
-      // fall through
-    case 'completed': {
-      const confirmedCount =
-        loopOutcome.kind === 'completed' ? loopOutcome.confirmedCount : 0;
-      const excludedCount =
-        loopOutcome.kind === 'completed' ? loopOutcome.excludedCount : 0;
-      await deps.db
-        .update(interviewSessions)
-        .set({ status: 'completed', completedAt: deps.now })
-        .where(eq(interviewSessions.id, sessionId));
-      await deps.db
-        .update(articleCandidates)
-        .set({ status: 'interview_complete' })
-        .where(eq(articleCandidates.id, candidateId));
-      // TODO(pr3): replace this hardcoded placeholder with a
-      // Claude-Haiku-generated closing summary (PRD §4.5 / §7.1).
-      const ack = await sendTelegramMessage({
-        token: deps.env.telegramBotToken,
-        chatId: deps.env.telegramChatId,
-        message: buildCompletionPlaceholderMessage({ confirmedCount }),
+  if (loopOutcome.kind === 'timed_out') {
+    return { kind: 'timed_out', sessionId, candidateId };
+  }
+
+  const confirmedCount =
+    loopOutcome.kind === 'completed' ? loopOutcome.confirmedCount : 0;
+  const excludedCount =
+    loopOutcome.kind === 'completed' ? loopOutcome.excludedCount : 0;
+  const allConfirmationsSkipped =
+    loopOutcome.kind === 'completed'
+      ? loopOutcome.allConfirmationsSkipped
+      : false;
+  const confirmedSignals =
+    loopOutcome.kind === 'completed' ? loopOutcome.confirmedSignals : [];
+
+  // 10a. PR 3 branch: fallback / follow-up / neither.
+  const runFollowUpLoopFn = deps.runFollowUpLoopFn ?? runFollowUpLoop;
+  const runFallbackLoopFn = deps.runFallbackLoopFn ?? runFallbackLoop;
+  const clusterContextBlock = buildClusterContextBlock(confirmedSignals);
+
+  let followUpsAnswered = 0;
+  let fallbackAnswered = false;
+
+  if (allConfirmationsSkipped) {
+    const fallback = await runFallbackLoopFn(
+      {
+        db: deps.db,
+        logger: deps.logger,
+        now: deps.now,
+        env: deps.env,
         fetchFn,
-      });
-      if (!ack.ok) {
-        deps.logger.warn(
-          {
-            source: SOURCE,
-            action: 'completion_ack_send_failed',
-            sessionId,
-            candidateId,
-            reason: ack.error,
-          },
-          'telegram completion ack send failed',
-        );
-      }
-      return {
-        kind: 'completed',
+        waitForReply: deps.waitForReply,
+      },
+      {
         sessionId,
         candidateId,
-        confirmedCount,
-        excludedCount,
-        followUpsAnswered: 0,
-        fallbackAnswered: false,
-        closingSummarySource: 'fallback',
-      };
+        candidate: {
+          proposedTitle: candidate.proposedTitle,
+          pillar: candidate.pillar,
+          primaryKeyword: candidate.primaryKeyword,
+          evidenceChunkIds: candidate.evidenceChunkIds,
+        },
+      },
+    );
+    if (fallback.kind === 'timed_out') {
+      return { kind: 'timed_out', sessionId, candidateId };
+    }
+    fallbackAnswered = true;
+  } else if (
+    loopOutcome.kind === 'completed' &&
+    confirmedSignals.length > 0
+  ) {
+    let serpGaps: string[] | null = null;
+    try {
+      const candidateRows = await deps.db
+        .select({ serpGaps: articleCandidates.serpGaps })
+        .from(articleCandidates)
+        .where(eq(articleCandidates.id, candidateId));
+      serpGaps = candidateRows[0]?.serpGaps ?? null;
+    } catch (err) {
+      deps.logger.warn(
+        {
+          source: SOURCE,
+          action: 'follow_up_serp_gap_lookup_failed',
+          sessionId,
+          reason: err instanceof Error ? err.message : String(err),
+        },
+        'serp_gaps read failed; follow-up loop skipped',
+      );
+    }
+    if (serpGaps !== null && serpGaps.length > 0) {
+      const followUp = await runFollowUpLoopFn(
+        {
+          db: deps.db,
+          logger: deps.logger,
+          now: deps.now,
+          env: deps.env,
+          anthropic: deps.anthropic,
+          fetchFn,
+          waitForReply: deps.waitForReply,
+        },
+        {
+          sessionId,
+          candidateId,
+          candidate: {
+            proposedTitle: candidate.proposedTitle,
+            pillar: candidate.pillar,
+            primaryKeyword: candidate.primaryKeyword,
+            serpGaps,
+          },
+          confirmedSignals,
+          clusterContextBlock,
+        },
+      );
+      if (followUp.kind === 'timed_out') {
+        return { kind: 'timed_out', sessionId, candidateId };
+      }
+      followUpsAnswered = followUp.followUpsAnswered;
     }
   }
+
+  // 10b. Terminal DB writes.
+  await deps.db
+    .update(interviewSessions)
+    .set({ status: 'completed', completedAt: deps.now })
+    .where(eq(interviewSessions.id, sessionId));
+  await deps.db
+    .update(articleCandidates)
+    .set({ status: 'interview_complete' })
+    .where(eq(articleCandidates.id, candidateId));
+
+  // 10c. Closing summary via Claude Haiku 4.5.
+  const generateClosingSummaryFn =
+    deps.generateClosingSummaryFn ?? generateClosingSummary;
+  const { anonymizeCount, skipCount } = await readAnswerCounts(
+    deps.db,
+    sessionId,
+  );
+  const draftDayName = nextDraftDay(deps.now);
+  const summaryResult = await generateClosingSummaryFn({
+    sessionState: {
+      confirmedCount,
+      anonymizeCount,
+      skipCount,
+      followUpsAnswered,
+      fallbackAnswered,
+      proposedTitle: candidate.proposedTitle,
+      draftDayName,
+    },
+    anthropic: deps.anthropic,
+    logger: deps.logger,
+  });
+  const summaryText = summaryResult.ok
+    ? summaryResult.summaryText
+    : (summaryResult.fallbackText ??
+        buildCompletionPlaceholderMessage({ confirmedCount }));
+
+  const ack = await sendTelegramMessage({
+    token: deps.env.telegramBotToken,
+    chatId: deps.env.telegramChatId,
+    message: summaryText,
+    fetchFn,
+  });
+  if (!ack.ok) {
+    deps.logger.warn(
+      {
+        source: SOURCE,
+        action: 'completion_ack_send_failed',
+        sessionId,
+        candidateId,
+        reason: ack.error,
+      },
+      'telegram completion ack send failed',
+    );
+  }
+
+  await reminderPromise;
+
+  return {
+    kind: 'completed',
+    sessionId,
+    candidateId,
+    confirmedCount,
+    excludedCount,
+    followUpsAnswered,
+    fallbackAnswered,
+    closingSummarySource: summaryResult.ok ? 'haiku' : 'fallback',
+  };
+}
+
+async function readAnswerCounts(
+  db: Database,
+  sessionId: string,
+): Promise<{ anonymizeCount: number; skipCount: number }> {
+  try {
+    const rows = await db
+      .select({ answers: interviewSessions.answers })
+      .from(interviewSessions)
+      .where(eq(interviewSessions.id, sessionId));
+    const answers = rows[0]?.answers ?? [];
+    let anonymizeCount = 0;
+    let skipCount = 0;
+    for (const a of answers) {
+      const r = (a as { response?: unknown }).response;
+      if (r === 'anon') anonymizeCount += 1;
+      else if (r === 'skip') skipCount += 1;
+    }
+    return { anonymizeCount, skipCount };
+  } catch {
+    return { anonymizeCount: 0, skipCount: 0 };
+  }
+}
+
+function buildClusterContextBlock(
+  signals: ReadonlyArray<import('./types.js').ConfirmedSignalSummary>,
+): string {
+  if (signals.length === 0) {
+    return '# Cluster context\n\n(no confirmed signals)\n';
+  }
+  const lines: string[] = [];
+  lines.push('# Cluster context — signals confirmed by Hassan');
+  lines.push('');
+  for (const s of signals) {
+    lines.push(`-- signal_id: ${s.id}`);
+    lines.push(`   source: ${s.source}`);
+    lines.push(`   captured_at_iso: ${s.capturedAt.toISOString()}`);
+    lines.push(`   redacted_text:`);
+    lines.push(s.redactedText);
+    lines.push('');
+  }
+  return lines.join('\n');
 }
 
 interface ResolveTerminalArgs {
@@ -548,6 +738,25 @@ export function createInterviewSessionJob(
             // body of `runInterviewSession` is intentionally not
             // wrapped in step.run, so a direct call here is correct.
             await step.sendEvent('open-session', payload);
+          },
+          // PR 3: scheduled reminder via durable step.sleep + step.run.
+          scheduleReminder: async ({ sessionId, proposedTitle }) => {
+            await step.sleep('reminder-delay', '48h');
+            await step.run('reminder-check-and-send', async () => {
+              await runReminderStep(
+                {
+                  db,
+                  logger,
+                  fetchFn: fetch,
+                  token: env.telegramBotToken,
+                  chatId: env.telegramChatId,
+                  // Inside step.run we are already past the 48h sleep,
+                  // so the inner sleep is a no-op.
+                  sleep: async () => undefined,
+                },
+                { sessionId, proposedTitle },
+              );
+            });
           },
           waitForReply: async (sessionId, timeoutMs) => {
             // Inngest's typed `match` is @deprecated in v3.54.x and only
