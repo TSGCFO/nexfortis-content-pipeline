@@ -1,9 +1,129 @@
 [
   {
-    "url": "https://cursor.com/docs/get-started/quickstart",
-    "title": "Quickstart | Cursor Docs",
-    "file": "cursor.com_docs_get-started_quickstart.md",
-    "size": 7578
+    "url": "https://cursor.com/docs",
+    "title": "Cursor Docs \u2014 Agent, Rules, MCP, Skills & CLI",
+    "file": "cursor.com_docs.md",
+    "size": 6943
+  },
+  {
+    "url": "https://cursor.com/docs/account/enterprise/billing-groups",
+    "title": "Billing Groups | Cursor Docs",
+    "file": "cursor.com_docs_account_enterprise_billing-groups.md",
+    "size": 7864
+  },
+  {
+    "url": "https://cursor.com/docs/account/enterprise/service-accounts",
+    "title": "Service Accounts | Cursor Docs",
+    "file": "cursor.com_docs_account_enterprise_service-accounts.md",
+    "size": 11852
+  },
+  {
+    "url": "https://cursor.com/docs/account/pricing/request-based-legacy",
+    "title": "Request-Based Legacy Pricing | Cursor Docs",
+    "file": "cursor.com_docs_account_pricing_request-based-legacy.md",
+    "size": 6755
+  },
+  {
+    "url": "https://cursor.com/docs/account/regions",
+    "title": "Regions | Cursor Docs",
+    "file": "cursor.com_docs_account_regions.md",
+    "size": 5023
+  },
+  {
+    "url": "https://cursor.com/docs/account/teams/admin-api",
+    "title": "Admin API | Cursor Docs",
+    "file": "cursor.com_docs_account_teams_admin-api.md",
+    "size": 44974
+  },
+  {
+    "url": "https://cursor.com/docs/account/teams/ai-code-tracking-api",
+    "title": "AI Code Tracking API | Cursor Docs",
+    "file": "cursor.com_docs_account_teams_ai-code-tracking-api.md",
+    "size": 24614
+  },
+  {
+    "url": "https://cursor.com/docs/account/teams/analytics",
+    "title": "Analytics | Cursor Docs",
+    "file": "cursor.com_docs_account_teams_analytics.md",
+    "size": 16709
+  },
+  {
+    "url": "https://cursor.com/docs/account/teams/analytics-api",
+    "title": "Analytics API | Cursor Docs",
+    "file": "cursor.com_docs_account_teams_analytics-api.md",
+    "size": 65591
+  },
+  {
+    "url": "https://cursor.com/docs/account/teams/dashboard",
+    "title": "Dashboard | Cursor Docs",
+    "file": "cursor.com_docs_account_teams_dashboard.md",
+    "size": 12239
+  },
+  {
+    "url": "https://cursor.com/docs/account/teams/members",
+    "title": "Members & Roles | Cursor Docs",
+    "file": "cursor.com_docs_account_teams_members.md",
+    "size": 9875
+  },
+  {
+    "url": "https://cursor.com/docs/account/teams/pricing",
+    "title": "Team Pricing | Cursor Docs",
+    "file": "cursor.com_docs_account_teams_pricing.md",
+    "size": 8697
+  },
+  {
+    "url": "https://cursor.com/docs/account/teams/scim",
+    "title": "SCIM | Cursor Docs",
+    "file": "cursor.com_docs_account_teams_scim.md",
+    "size": 11103
+  },
+  {
+    "url": "https://cursor.com/docs/account/teams/setup",
+    "title": "Get Started with Teams | Cursor Docs",
+    "file": "cursor.com_docs_account_teams_setup.md",
+    "size": 6245
+  },
+  {
+    "url": "https://cursor.com/docs/account/teams/sso",
+    "title": "SSO | Cursor Docs",
+    "file": "cursor.com_docs_account_teams_sso.md",
+    "size": 5903
+  },
+  {
+    "url": "https://cursor.com/docs/account/update-access",
+    "title": "Update Access | Cursor Docs",
+    "file": "cursor.com_docs_account_update-access.md",
+    "size": 3774
+  },
+  {
+    "url": "https://cursor.com/docs/agent/agent-review",
+    "title": "Agent Review | Cursor Docs",
+    "file": "cursor.com_docs_agent_agent-review.md",
+    "size": 4446
+  },
+  {
+    "url": "https://cursor.com/docs/agent/agents-window",
+    "title": "Agents Window | Cursor Docs",
+    "file": "cursor.com_docs_agent_agents-window.md",
+    "size": 6950
+  },
+  {
+    "url": "https://cursor.com/docs/agent/debug-mode",
+    "title": "Debug Mode | Cursor Docs",
+    "file": "cursor.com_docs_agent_debug-mode.md",
+    "size": 5718
+  },
+  {
+    "url": "https://cursor.com/docs/agent/overview",
+    "title": "Overview | Cursor Docs",
+    "file": "cursor.com_docs_agent_overview.md",
+    "size": 8675
+  },
+  {
+    "url": "https://cursor.com/docs/agent/plan-mode",
+    "title": "Plan Mode | Cursor Docs",
+    "file": "cursor.com_docs_agent_plan-mode.md",
+    "size": 5084
   },
   {
     "url": "https://cursor.com/docs/agent/prompting",
@@ -12,28 +132,106 @@
     "size": 6635
   },
   {
-    "url": "https://cursor.com/docs/rules",
-    "title": "Rules | Cursor Docs",
-    "file": "cursor.com_docs_rules.md",
-    "size": 19686
+    "url": "https://cursor.com/docs/agent/security",
+    "title": "Agent Security | Cursor Docs",
+    "file": "cursor.com_docs_agent_security.md",
+    "size": 6731
   },
   {
-    "url": "https://cursor.com/docs/mcp",
-    "title": "Model Context Protocol (MCP) | Cursor Docs",
-    "file": "cursor.com_docs_mcp.md",
-    "size": 17155
+    "url": "https://cursor.com/docs/agent/tools/browser",
+    "title": "Browser | Cursor Docs",
+    "file": "cursor.com_docs_agent_tools_browser.md",
+    "size": 17925
   },
   {
-    "url": "https://cursor.com/docs/cloud-agent/best-practices",
-    "title": "Cloud Agent Best Practices | Cursor Docs",
-    "file": "cursor.com_docs_cloud-agent_best-practices.md",
-    "size": 6018
+    "url": "https://cursor.com/docs/agent/tools/canvas",
+    "title": "Canvases | Cursor Docs",
+    "file": "cursor.com_docs_agent_tools_canvas.md",
+    "size": 7251
+  },
+  {
+    "url": "https://cursor.com/docs/agent/tools/search",
+    "title": "Semantic & Agentic Search | Cursor Docs",
+    "file": "cursor.com_docs_agent_tools_search.md",
+    "size": 9866
+  },
+  {
+    "url": "https://cursor.com/docs/agent/tools/terminal",
+    "title": "Terminal | Cursor Docs",
+    "file": "cursor.com_docs_agent_tools_terminal.md",
+    "size": 16118
+  },
+  {
+    "url": "https://cursor.com/docs/api",
+    "title": "Cursor APIs Overview | Cursor Docs",
+    "file": "cursor.com_docs_api.md",
+    "size": 17777
+  },
+  {
+    "url": "https://cursor.com/docs/bugbot",
+    "title": "Bugbot | Cursor Docs",
+    "file": "cursor.com_docs_bugbot.md",
+    "size": 21656
+  },
+  {
+    "url": "https://cursor.com/docs/bugbot/legacy-pricing",
+    "title": "Legacy Bugbot pricing | Cursor Docs",
+    "file": "cursor.com_docs_bugbot_legacy-pricing.md",
+    "size": 4831
+  },
+  {
+    "url": "https://cursor.com/docs/cli/acp",
+    "title": "ACP | Cursor Docs",
+    "file": "cursor.com_docs_cli_acp.md",
+    "size": 18368
   },
   {
     "url": "https://cursor.com/docs/cli/github-actions",
     "title": "GitHub Actions | Cursor Docs",
     "file": "cursor.com_docs_cli_github-actions.md",
     "size": 7705
+  },
+  {
+    "url": "https://cursor.com/docs/cli/headless",
+    "title": "Using Headless CLI | Cursor Docs",
+    "file": "cursor.com_docs_cli_headless.md",
+    "size": 11012
+  },
+  {
+    "url": "https://cursor.com/docs/cli/installation",
+    "title": "CLI Installation | Cursor Docs",
+    "file": "cursor.com_docs_cli_installation.md",
+    "size": 4274
+  },
+  {
+    "url": "https://cursor.com/docs/cli/mcp",
+    "title": "MCP | Cursor Docs",
+    "file": "cursor.com_docs_cli_mcp.md",
+    "size": 6593
+  },
+  {
+    "url": "https://cursor.com/docs/cli/overview",
+    "title": "Cursor CLI | Cursor Docs",
+    "file": "cursor.com_docs_cli_overview.md",
+    "size": 6412
+  },
+  {
+    "url": "https://cursor.com/docs/cli/reference/authentication",
+    "title": "Authentication | Cursor Docs",
+    "file": "cursor.com_docs_cli_reference_authentication.md",
+    "size": 5418
+  },
+  {
+    "url": "https://cursor.com/docs/cli/reference/configuration",
+    "title": "Configuration | Cursor Docs",
+    "file": "cursor.com_docs_cli_reference_configuration.md",
+    "size": 8365
+  },
+  {
+    "url": "https://cursor.com/docs/cli/reference/output-format",
+    "title": "Output format | Cursor Docs",
+    "file": "cursor.com_docs_cli_reference_output-format.md",
+    "size": 14054
   },
   {
     "url": "https://cursor.com/docs/cli/reference/parameters",
@@ -48,298 +246,10 @@
     "size": 7423
   },
   {
-    "url": "https://cursor.com/docs/cli/using",
-    "title": "Using Agent in CLI | Cursor Docs",
-    "file": "cursor.com_docs_cli_using.md",
-    "size": 9259
-  },
-  {
-    "url": "https://cursor.com/docs/cli/reference/output-format",
-    "title": "Output format | Cursor Docs",
-    "file": "cursor.com_docs_cli_reference_output-format.md",
-    "size": 14054
-  },
-  {
-    "url": "https://cursor.com/docs/api",
-    "title": "Cursor APIs Overview | Cursor Docs",
-    "file": "cursor.com_docs_api.md",
-    "size": 17777
-  },
-  {
-    "url": "https://cursor.com/docs/agent/debug-mode",
-    "title": "Debug Mode | Cursor Docs",
-    "file": "cursor.com_docs_agent_debug-mode.md",
-    "size": 5718
-  },
-  {
-    "url": "https://cursor.com/docs/agent/security",
-    "title": "Agent Security | Cursor Docs",
-    "file": "cursor.com_docs_agent_security.md",
-    "size": 6731
-  },
-  {
-    "url": "https://cursor.com/docs/subagents",
-    "title": "Subagents | Cursor Docs",
-    "file": "cursor.com_docs_subagents.md",
-    "size": 25698
-  },
-  {
-    "url": "https://cursor.com/docs/agent/agent-review",
-    "title": "Agent Review | Cursor Docs",
-    "file": "cursor.com_docs_agent_agent-review.md",
-    "size": 4446
-  },
-  {
-    "url": "https://cursor.com/docs/agent/tools/canvas",
-    "title": "Canvases | Cursor Docs",
-    "file": "cursor.com_docs_agent_tools_canvas.md",
-    "size": 7251
-  },
-  {
-    "url": "https://cursor.com/docs/reference/sandbox",
-    "title": "sandbox.json Reference | Cursor Docs",
-    "file": "cursor.com_docs_reference_sandbox.md",
-    "size": 9343
-  },
-  {
-    "url": "https://cursor.com/docs/cloud-agent/my-machines",
-    "title": "My Machines | Cursor Docs",
-    "file": "cursor.com_docs_cloud-agent_my-machines.md",
-    "size": 12998
-  },
-  {
-    "url": "https://cursor.com/docs/models-and-pricing",
-    "title": "Models & Pricing | Cursor Docs",
-    "file": "cursor.com_docs_models-and-pricing.md",
-    "size": 11691
-  },
-  {
-    "url": "https://cursor.com/docs/agent/tools/terminal",
-    "title": "Terminal | Cursor Docs",
-    "file": "cursor.com_docs_agent_tools_terminal.md",
-    "size": 16118
-  },
-  {
-    "url": "https://cursor.com/docs/cli/shell-mode",
-    "title": "Shell Mode | Cursor Docs",
-    "file": "cursor.com_docs_cli_shell-mode.md",
-    "size": 5558
-  },
-  {
-    "url": "https://cursor.com/docs/agent/tools/search",
-    "title": "Semantic & Agentic Search | Cursor Docs",
-    "file": "cursor.com_docs_agent_tools_search.md",
-    "size": 9866
-  },
-  {
-    "url": "https://cursor.com/docs/cloud-agent/api/v0",
-    "title": "Cloud Agents API v0 (legacy) | Cursor Docs",
-    "file": "cursor.com_docs_cloud-agent_api_v0.md",
-    "size": 24885
-  },
-  {
-    "url": "https://cursor.com/docs/account/teams/admin-api",
-    "title": "Admin API | Cursor Docs",
-    "file": "cursor.com_docs_account_teams_admin-api.md",
-    "size": 44974
-  },
-  {
-    "url": "https://cursor.com/docs/cloud-agent/self-hosted-pool",
-    "title": "Self-Hosted Pool | Cursor Docs",
-    "file": "cursor.com_docs_cloud-agent_self-hosted-pool.md",
-    "size": 25182
-  },
-  {
-    "url": "https://cursor.com/docs/plugins",
-    "title": "Plugins | Cursor Docs",
-    "file": "cursor.com_docs_plugins.md",
-    "size": 12146
-  },
-  {
-    "url": "https://cursor.com/docs/hooks",
-    "title": "Hooks | Cursor Docs",
-    "file": "cursor.com_docs_hooks.md",
-    "size": 47479
-  },
-  {
-    "url": "https://cursor.com/docs/account/teams/analytics-api",
-    "title": "Analytics API | Cursor Docs",
-    "file": "cursor.com_docs_account_teams_analytics-api.md",
-    "size": 65591
-  },
-  {
-    "url": "https://cursor.com/docs/agent/tools/browser",
-    "title": "Browser | Cursor Docs",
-    "file": "cursor.com_docs_agent_tools_browser.md",
-    "size": 17925
-  },
-  {
-    "url": "https://cursor.com/docs/cloud-agent/setup",
-    "title": "Setup | Cursor Docs",
-    "file": "cursor.com_docs_cloud-agent_setup.md",
-    "size": 23910
-  },
-  {
-    "url": "https://cursor.com/docs/account/enterprise/service-accounts",
-    "title": "Service Accounts | Cursor Docs",
-    "file": "cursor.com_docs_account_enterprise_service-accounts.md",
-    "size": 11852
-  },
-  {
-    "url": "https://cursor.com/docs/cloud-agent/automations",
-    "title": "Automations | Cursor Docs",
-    "file": "cursor.com_docs_cloud-agent_automations.md",
-    "size": 17990
-  },
-  {
-    "url": "https://cursor.com/docs/models/claude-opus-4-8",
-    "title": "Claude Opus 4.8 | Cursor Docs",
-    "file": "cursor.com_docs_models_claude-opus-4-8.md",
-    "size": 7997
-  },
-  {
-    "url": "https://cursor.com/docs/agent/plan-mode",
-    "title": "Plan Mode | Cursor Docs",
-    "file": "cursor.com_docs_agent_plan-mode.md",
-    "size": 5084
-  },
-  {
-    "url": "https://cursor.com/docs/agent/overview",
-    "title": "Overview | Cursor Docs",
-    "file": "cursor.com_docs_agent_overview.md",
-    "size": 8675
-  },
-  {
-    "url": "https://cursor.com/docs/cloud-agent/api/endpoints",
-    "title": "Cloud Agents API | Cursor Docs",
-    "file": "cursor.com_docs_cloud-agent_api_endpoints.md",
-    "size": 43516
-  },
-  {
-    "url": "https://cursor.com/docs/cloud-agent/private-workers",
-    "title": "Private Cloud Workers | Cursor Docs",
-    "file": "cursor.com_docs_cloud-agent_private-workers.md",
-    "size": 22626
-  },
-  {
-    "url": "https://cursor.com/docs/reference/ignore-file",
-    "title": "Ignore File | Cursor Docs",
-    "file": "cursor.com_docs_reference_ignore-file.md",
-    "size": 8027
-  },
-  {
-    "url": "https://cursor.com/docs/cloud-agent/self-hosted-k8s",
-    "title": "Self-Hosted Cloud: Deploying with Kubernetes | Cursor Docs",
-    "file": "cursor.com_docs_cloud-agent_self-hosted-k8s.md",
-    "size": 12635
-  },
-  {
-    "url": "https://cursor.com/docs/sdk/typescript",
-    "title": "Cursor TypeScript SDK | Cursor Documentation",
-    "file": "cursor.com_docs_sdk_typescript.md",
-    "size": 62868
-  },
-  {
-    "url": "https://cursor.com/docs/mcp/install-links",
-    "title": "MCP Install Links | Cursor Docs",
-    "file": "cursor.com_docs_mcp_install-links.md",
-    "size": 5748
-  },
-  {
-    "url": "https://cursor.com/docs/account/teams/ai-code-tracking-api",
-    "title": "AI Code Tracking API | Cursor Docs",
-    "file": "cursor.com_docs_account_teams_ai-code-tracking-api.md",
-    "size": 24614
-  },
-  {
-    "url": "https://cursor.com/docs/cli/installation",
-    "title": "CLI Installation | Cursor Docs",
-    "file": "cursor.com_docs_cli_installation.md",
-    "size": 4274
-  },
-  {
-    "url": "https://cursor.com/docs/cli/reference/terminal-setup",
-    "title": "Terminal Setup | Cursor Docs",
-    "file": "cursor.com_docs_cli_reference_terminal-setup.md",
-    "size": 11852
-  },
-  {
-    "url": "https://cursor.com/docs/cloud-agent/self-hosted-cloud-run",
-    "title": "Self-Hosted Cloud: Deploying with Cloud Run Worker Pools | Cursor Docs",
-    "file": "cursor.com_docs_cloud-agent_self-hosted-cloud-run.md",
-    "size": 19238
-  },
-  {
-    "url": "https://cursor.com/docs/sdk/python",
-    "title": "Cursor Python SDK | Cursor Documentation",
-    "file": "cursor.com_docs_sdk_python.md",
-    "size": 60435
-  },
-  {
-    "url": "https://cursor.com/docs/reference/deeplinks",
-    "title": "Deeplinks | Cursor Docs",
-    "file": "cursor.com_docs_reference_deeplinks.md",
-    "size": 6657
-  },
-  {
-    "url": "https://cursor.com/docs/extension-api",
-    "title": "Extension API reference | Cursor Docs",
-    "file": "cursor.com_docs_extension-api.md",
-    "size": 11007
-  },
-  {
-    "url": "https://cursor.com/docs/skills",
-    "title": "Agent Skills | Cursor Docs",
-    "file": "cursor.com_docs_skills.md",
-    "size": 13017
-  },
-  {
-    "url": "https://cursor.com/docs/cli/overview",
-    "title": "Cursor CLI | Cursor Docs",
-    "file": "cursor.com_docs_cli_overview.md",
-    "size": 6412
-  },
-  {
-    "url": "https://cursor.com/docs/cloud-agent/api/webhooks",
-    "title": "Webhooks | Cursor Docs",
-    "file": "cursor.com_docs_cloud-agent_api_webhooks.md",
-    "size": 9060
-  },
-  {
-    "url": "https://cursor.com/docs/models/claude-opus-4-7",
-    "title": "Claude 4.7 Opus | Cursor Docs",
-    "file": "cursor.com_docs_models_claude-opus-4-7.md",
-    "size": 7453
-  },
-  {
-    "url": "https://cursor.com/docs/cli/mcp",
-    "title": "MCP | Cursor Docs",
-    "file": "cursor.com_docs_cli_mcp.md",
-    "size": 6593
-  },
-  {
-    "url": "https://cursor.com/docs/models/claude-opus-4-7-fast",
-    "title": "Claude Opus 4.7 (fast mode) | Cursor Docs",
-    "file": "cursor.com_docs_models_claude-opus-4-7-fast.md",
-    "size": 5646
-  },
-  {
-    "url": "https://cursor.com/docs/evals",
-    "title": "Run Cursor in your evals | Cursor Documentation",
-    "file": "cursor.com_docs_evals.md",
-    "size": 10972
-  },
-  {
-    "url": "https://cursor.com/docs/reference/permissions",
-    "title": "permissions.json Reference | Cursor Docs",
-    "file": "cursor.com_docs_reference_permissions.md",
-    "size": 10055
-  },
-  {
-    "url": "https://cursor.com/docs/cloud-agent/security-network",
-    "title": "Security & Network | Cursor Docs",
-    "file": "cursor.com_docs_cloud-agent_security-network.md",
-    "size": 18339
+    "url": "https://cursor.com/docs/cli/reference/slash-commands",
+    "title": "Slash commands | Cursor Docs",
+    "file": "cursor.com_docs_cli_reference_slash-commands.md",
+    "size": 4837
   },
   {
     "url": "https://cursor.com/docs/cli/reference/slash-commands.md",
@@ -348,58 +258,22 @@
     "size": 1974
   },
   {
-    "url": "https://cursor.com/docs/cloud-agent/settings",
-    "title": "Dashboard settings | Cursor Docs",
-    "file": "cursor.com_docs_cloud-agent_settings.md",
-    "size": 7861
+    "url": "https://cursor.com/docs/cli/reference/terminal-setup",
+    "title": "Terminal Setup | Cursor Docs",
+    "file": "cursor.com_docs_cli_reference_terminal-setup.md",
+    "size": 11852
   },
   {
-    "url": "https://cursor.com/docs/cli/headless",
-    "title": "Using Headless CLI | Cursor Docs",
-    "file": "cursor.com_docs_cli_headless.md",
-    "size": 11012
+    "url": "https://cursor.com/docs/cli/shell-mode",
+    "title": "Shell Mode | Cursor Docs",
+    "file": "cursor.com_docs_cli_shell-mode.md",
+    "size": 5558
   },
   {
-    "url": "https://cursor.com/docs/reference/keyboard-shortcuts",
-    "title": "Keyboard Shortcuts | Cursor Docs",
-    "file": "cursor.com_docs_reference_keyboard-shortcuts.md",
-    "size": 6576
-  },
-  {
-    "url": "https://cursor.com/docs/reference/plugins",
-    "title": "Plugins Reference | Cursor Docs",
-    "file": "cursor.com_docs_reference_plugins.md",
-    "size": 18570
-  },
-  {
-    "url": "https://cursor.com/docs/cli/reference/slash-commands",
-    "title": "Slash commands | Cursor Docs",
-    "file": "cursor.com_docs_cli_reference_slash-commands.md",
-    "size": 4837
-  },
-  {
-    "url": "https://cursor.com/docs/cloud-agent/capabilities",
-    "title": "Capabilities | Cursor Docs",
-    "file": "cursor.com_docs_cloud-agent_capabilities.md",
-    "size": 8844
-  },
-  {
-    "url": "https://cursor.com/docs/cli/reference/authentication",
-    "title": "Authentication | Cursor Docs",
-    "file": "cursor.com_docs_cli_reference_authentication.md",
-    "size": 5418
-  },
-  {
-    "url": "https://cursor.com/docs/cli/acp",
-    "title": "ACP | Cursor Docs",
-    "file": "cursor.com_docs_cli_acp.md",
-    "size": 18368
-  },
-  {
-    "url": "https://cursor.com/docs/reference/third-party-hooks",
-    "title": "Third Party Hooks | Cursor Docs",
-    "file": "cursor.com_docs_reference_third-party-hooks.md",
-    "size": 11930
+    "url": "https://cursor.com/docs/cli/using",
+    "title": "Using Agent in CLI | Cursor Docs",
+    "file": "cursor.com_docs_cli_using.md",
+    "size": 9259
   },
   {
     "url": "https://cursor.com/docs/cloud-agent",
@@ -408,9 +282,417 @@
     "size": 11820
   },
   {
-    "url": "https://cursor.com/docs/cli/reference/configuration",
-    "title": "Configuration | Cursor Docs",
-    "file": "cursor.com_docs_cli_reference_configuration.md",
-    "size": 8365
+    "url": "https://cursor.com/docs/cloud-agent/api/endpoints",
+    "title": "Cloud Agents API | Cursor Docs",
+    "file": "cursor.com_docs_cloud-agent_api_endpoints.md",
+    "size": 43516
+  },
+  {
+    "url": "https://cursor.com/docs/cloud-agent/api/v0",
+    "title": "Cloud Agents API v0 (legacy) | Cursor Docs",
+    "file": "cursor.com_docs_cloud-agent_api_v0.md",
+    "size": 24885
+  },
+  {
+    "url": "https://cursor.com/docs/cloud-agent/api/webhooks",
+    "title": "Webhooks | Cursor Docs",
+    "file": "cursor.com_docs_cloud-agent_api_webhooks.md",
+    "size": 9060
+  },
+  {
+    "url": "https://cursor.com/docs/cloud-agent/automations",
+    "title": "Automations | Cursor Docs",
+    "file": "cursor.com_docs_cloud-agent_automations.md",
+    "size": 17990
+  },
+  {
+    "url": "https://cursor.com/docs/cloud-agent/best-practices",
+    "title": "Cloud Agent Best Practices | Cursor Docs",
+    "file": "cursor.com_docs_cloud-agent_best-practices.md",
+    "size": 6018
+  },
+  {
+    "url": "https://cursor.com/docs/cloud-agent/capabilities",
+    "title": "Capabilities | Cursor Docs",
+    "file": "cursor.com_docs_cloud-agent_capabilities.md",
+    "size": 8844
+  },
+  {
+    "url": "https://cursor.com/docs/cloud-agent/my-machines",
+    "title": "My Machines | Cursor Docs",
+    "file": "cursor.com_docs_cloud-agent_my-machines.md",
+    "size": 12998
+  },
+  {
+    "url": "https://cursor.com/docs/cloud-agent/private-workers",
+    "title": "Private Cloud Workers | Cursor Docs",
+    "file": "cursor.com_docs_cloud-agent_private-workers.md",
+    "size": 22626
+  },
+  {
+    "url": "https://cursor.com/docs/cloud-agent/security-network",
+    "title": "Security & Network | Cursor Docs",
+    "file": "cursor.com_docs_cloud-agent_security-network.md",
+    "size": 18339
+  },
+  {
+    "url": "https://cursor.com/docs/cloud-agent/self-hosted-cloud-run",
+    "title": "Self-Hosted Cloud: Deploying with Cloud Run Worker Pools | Cursor Docs",
+    "file": "cursor.com_docs_cloud-agent_self-hosted-cloud-run.md",
+    "size": 19238
+  },
+  {
+    "url": "https://cursor.com/docs/cloud-agent/self-hosted-k8s",
+    "title": "Self-Hosted Cloud: Deploying with Kubernetes | Cursor Docs",
+    "file": "cursor.com_docs_cloud-agent_self-hosted-k8s.md",
+    "size": 12635
+  },
+  {
+    "url": "https://cursor.com/docs/cloud-agent/self-hosted-pool",
+    "title": "Self-Hosted Pool | Cursor Docs",
+    "file": "cursor.com_docs_cloud-agent_self-hosted-pool.md",
+    "size": 25182
+  },
+  {
+    "url": "https://cursor.com/docs/cloud-agent/settings",
+    "title": "Dashboard settings | Cursor Docs",
+    "file": "cursor.com_docs_cloud-agent_settings.md",
+    "size": 7861
+  },
+  {
+    "url": "https://cursor.com/docs/cloud-agent/setup",
+    "title": "Setup | Cursor Docs",
+    "file": "cursor.com_docs_cloud-agent_setup.md",
+    "size": 23910
+  },
+  {
+    "url": "https://cursor.com/docs/configuration/migrations/vscode",
+    "title": "VS Code Migration | Cursor Docs",
+    "file": "cursor.com_docs_configuration_migrations_vscode.md",
+    "size": 6209
+  },
+  {
+    "url": "https://cursor.com/docs/configuration/worktrees",
+    "title": "Worktrees | Cursor Docs",
+    "file": "cursor.com_docs_configuration_worktrees.md",
+    "size": 12050
+  },
+  {
+    "url": "https://cursor.com/docs/customizing/aws-bedrock",
+    "title": "AWS Bedrock | Cursor Docs",
+    "file": "cursor.com_docs_customizing_aws-bedrock.md",
+    "size": 8068
+  },
+  {
+    "url": "https://cursor.com/docs/enterprise",
+    "title": "Enterprise | Cursor Docs",
+    "file": "cursor.com_docs_enterprise.md",
+    "size": 14596
+  },
+  {
+    "url": "https://cursor.com/docs/enterprise/baa",
+    "title": "HIPAA Business Associate Agreements | Cursor Docs",
+    "file": "cursor.com_docs_enterprise_baa.md",
+    "size": 8879
+  },
+  {
+    "url": "https://cursor.com/docs/enterprise/compliance-and-monitoring",
+    "title": "Compliance and Monitoring | Cursor Docs",
+    "file": "cursor.com_docs_enterprise_compliance-and-monitoring.md",
+    "size": 11763
+  },
+  {
+    "url": "https://cursor.com/docs/enterprise/deployment-patterns",
+    "title": "Deployment Patterns | Cursor Docs",
+    "file": "cursor.com_docs_enterprise_deployment-patterns.md",
+    "size": 25874
+  },
+  {
+    "url": "https://cursor.com/docs/enterprise/endpoint-security",
+    "title": "Endpoint Security Configuration | Cursor Docs",
+    "file": "cursor.com_docs_enterprise_endpoint-security.md",
+    "size": 8959
+  },
+  {
+    "url": "https://cursor.com/docs/enterprise/identity-and-access-management",
+    "title": "Identity and Access Management | Cursor Docs",
+    "file": "cursor.com_docs_enterprise_identity-and-access-management.md",
+    "size": 14013
+  },
+  {
+    "url": "https://cursor.com/docs/enterprise/llm-safety-and-controls",
+    "title": "LLM Safety and Controls | Cursor Docs",
+    "file": "cursor.com_docs_enterprise_llm-safety-and-controls.md",
+    "size": 21168
+  },
+  {
+    "url": "https://cursor.com/docs/enterprise/model-and-integration-management",
+    "title": "Model and Integration Management | Cursor Docs",
+    "file": "cursor.com_docs_enterprise_model-and-integration-management.md",
+    "size": 11782
+  },
+  {
+    "url": "https://cursor.com/docs/enterprise/network-configuration",
+    "title": "Network Configuration | Cursor Docs",
+    "file": "cursor.com_docs_enterprise_network-configuration.md",
+    "size": 12475
+  },
+  {
+    "url": "https://cursor.com/docs/enterprise/pooled-usage",
+    "title": "Pooled Usage | Cursor Docs",
+    "file": "cursor.com_docs_enterprise_pooled-usage.md",
+    "size": 6764
+  },
+  {
+    "url": "https://cursor.com/docs/enterprise/privacy-and-data-governance",
+    "title": "Privacy and Data Governance | Cursor Docs",
+    "file": "cursor.com_docs_enterprise_privacy-and-data-governance.md",
+    "size": 9255
+  },
+  {
+    "url": "https://cursor.com/docs/evals",
+    "title": "Run Cursor in your evals | Cursor Documentation",
+    "file": "cursor.com_docs_evals.md",
+    "size": 10972
+  },
+  {
+    "url": "https://cursor.com/docs/extension-api",
+    "title": "Extension API reference | Cursor Docs",
+    "file": "cursor.com_docs_extension-api.md",
+    "size": 11007
+  },
+  {
+    "url": "https://cursor.com/docs/get-started/quickstart",
+    "title": "Quickstart | Cursor Docs",
+    "file": "cursor.com_docs_get-started_quickstart.md",
+    "size": 7578
+  },
+  {
+    "url": "https://cursor.com/docs/hooks",
+    "title": "Hooks | Cursor Docs",
+    "file": "cursor.com_docs_hooks.md",
+    "size": 47479
+  },
+  {
+    "url": "https://cursor.com/docs/integrations/cursor-blame",
+    "title": "Cursor Blame | Cursor Docs",
+    "file": "cursor.com_docs_integrations_cursor-blame.md",
+    "size": 7864
+  },
+  {
+    "url": "https://cursor.com/docs/integrations/github",
+    "title": "GitHub | Cursor Docs",
+    "file": "cursor.com_docs_integrations_github.md",
+    "size": 8845
+  },
+  {
+    "url": "https://cursor.com/docs/integrations/gitlab",
+    "title": "GitLab | Cursor Docs",
+    "file": "cursor.com_docs_integrations_gitlab.md",
+    "size": 5776
+  },
+  {
+    "url": "https://cursor.com/docs/integrations/jetbrains",
+    "title": "JetBrains | Cursor Docs",
+    "file": "cursor.com_docs_integrations_jetbrains.md",
+    "size": 6075
+  },
+  {
+    "url": "https://cursor.com/docs/integrations/jira",
+    "title": "Jira | Cursor Docs",
+    "file": "cursor.com_docs_integrations_jira.md",
+    "size": 15621
+  },
+  {
+    "url": "https://cursor.com/docs/integrations/linear",
+    "title": "Linear | Cursor Docs",
+    "file": "cursor.com_docs_integrations_linear.md",
+    "size": 9062
+  },
+  {
+    "url": "https://cursor.com/docs/integrations/microsoft-teams",
+    "title": "Microsoft Teams | Cursor Docs",
+    "file": "cursor.com_docs_integrations_microsoft-teams.md",
+    "size": 11882
+  },
+  {
+    "url": "https://cursor.com/docs/integrations/slack",
+    "title": "Slack | Cursor Docs",
+    "file": "cursor.com_docs_integrations_slack.md",
+    "size": 14755
+  },
+  {
+    "url": "https://cursor.com/docs/integrations/xcode",
+    "title": "Xcode | Cursor Docs",
+    "file": "cursor.com_docs_integrations_xcode.md",
+    "size": 10091
+  },
+  {
+    "url": "https://cursor.com/docs/mcp",
+    "title": "Model Context Protocol (MCP) | Cursor Docs",
+    "file": "cursor.com_docs_mcp.md",
+    "size": 17155
+  },
+  {
+    "url": "https://cursor.com/docs/mcp/install-links",
+    "title": "MCP Install Links | Cursor Docs",
+    "file": "cursor.com_docs_mcp_install-links.md",
+    "size": 5748
+  },
+  {
+    "url": "https://cursor.com/docs/models-and-pricing",
+    "title": "Models & Pricing | Cursor Docs",
+    "file": "cursor.com_docs_models-and-pricing.md",
+    "size": 11691
+  },
+  {
+    "url": "https://cursor.com/docs/models/claude-4-5-haiku",
+    "title": "Claude 4.5 Haiku | Cursor Docs",
+    "file": "cursor.com_docs_models_claude-4-5-haiku.md",
+    "size": 4227
+  },
+  {
+    "url": "https://cursor.com/docs/models/claude-4-5-sonnet",
+    "title": "Claude 4.5 Sonnet | Cursor Docs",
+    "file": "cursor.com_docs_models_claude-4-5-sonnet.md",
+    "size": 5454
+  },
+  {
+    "url": "https://cursor.com/docs/models/claude-4-6-sonnet",
+    "title": "Claude 4.6 Sonnet | Cursor Docs",
+    "file": "cursor.com_docs_models_claude-4-6-sonnet.md",
+    "size": 6917
+  },
+  {
+    "url": "https://cursor.com/docs/models/claude-4-sonnet",
+    "title": "Claude 4 Sonnet | Cursor Docs",
+    "file": "cursor.com_docs_models_claude-4-sonnet.md",
+    "size": 5435
+  },
+  {
+    "url": "https://cursor.com/docs/models/claude-4-sonnet-1m",
+    "title": "Claude 4 Sonnet 1M | Cursor Docs",
+    "file": "cursor.com_docs_models_claude-4-sonnet-1m.md",
+    "size": 5440
+  },
+  {
+    "url": "https://cursor.com/docs/models/claude-opus-4-5",
+    "title": "Claude 4.5 Opus | Cursor Docs",
+    "file": "cursor.com_docs_models_claude-opus-4-5.md",
+    "size": 5430
+  },
+  {
+    "url": "https://cursor.com/docs/models/claude-opus-4-6",
+    "title": "Claude 4.6 Opus | Cursor Docs",
+    "file": "cursor.com_docs_models_claude-opus-4-6.md",
+    "size": 6805
+  },
+  {
+    "url": "https://cursor.com/docs/models/claude-opus-4-6-fast",
+    "title": "Claude 4.6 Opus (Fast mode) | Cursor Docs",
+    "file": "cursor.com_docs_models_claude-opus-4-6-fast.md",
+    "size": 5502
+  },
+  {
+    "url": "https://cursor.com/docs/models/claude-opus-4-7",
+    "title": "Claude 4.7 Opus | Cursor Docs",
+    "file": "cursor.com_docs_models_claude-opus-4-7.md",
+    "size": 7453
+  },
+  {
+    "url": "https://cursor.com/docs/models/claude-opus-4-7-fast",
+    "title": "Claude Opus 4.7 (fast mode) | Cursor Docs",
+    "file": "cursor.com_docs_models_claude-opus-4-7-fast.md",
+    "size": 5646
+  },
+  {
+    "url": "https://cursor.com/docs/models/claude-opus-4-8",
+    "title": "Claude Opus 4.8 | Cursor Docs",
+    "file": "cursor.com_docs_models_claude-opus-4-8.md",
+    "size": 7997
+  },
+  {
+    "url": "https://cursor.com/docs/plugins",
+    "title": "Plugins | Cursor Docs",
+    "file": "cursor.com_docs_plugins.md",
+    "size": 12146
+  },
+  {
+    "url": "https://cursor.com/docs/reference/deeplinks",
+    "title": "Deeplinks | Cursor Docs",
+    "file": "cursor.com_docs_reference_deeplinks.md",
+    "size": 6657
+  },
+  {
+    "url": "https://cursor.com/docs/reference/ignore-file",
+    "title": "Ignore File | Cursor Docs",
+    "file": "cursor.com_docs_reference_ignore-file.md",
+    "size": 8027
+  },
+  {
+    "url": "https://cursor.com/docs/reference/keyboard-shortcuts",
+    "title": "Keyboard Shortcuts | Cursor Docs",
+    "file": "cursor.com_docs_reference_keyboard-shortcuts.md",
+    "size": 6576
+  },
+  {
+    "url": "https://cursor.com/docs/reference/permissions",
+    "title": "permissions.json Reference | Cursor Docs",
+    "file": "cursor.com_docs_reference_permissions.md",
+    "size": 10055
+  },
+  {
+    "url": "https://cursor.com/docs/reference/plugins",
+    "title": "Plugins Reference | Cursor Docs",
+    "file": "cursor.com_docs_reference_plugins.md",
+    "size": 18570
+  },
+  {
+    "url": "https://cursor.com/docs/reference/sandbox",
+    "title": "sandbox.json Reference | Cursor Docs",
+    "file": "cursor.com_docs_reference_sandbox.md",
+    "size": 9343
+  },
+  {
+    "url": "https://cursor.com/docs/reference/third-party-hooks",
+    "title": "Third Party Hooks | Cursor Docs",
+    "file": "cursor.com_docs_reference_third-party-hooks.md",
+    "size": 11930
+  },
+  {
+    "url": "https://cursor.com/docs/rules",
+    "title": "Rules | Cursor Docs",
+    "file": "cursor.com_docs_rules.md",
+    "size": 19686
+  },
+  {
+    "url": "https://cursor.com/docs/sdk/python",
+    "title": "Cursor Python SDK | Cursor Documentation",
+    "file": "cursor.com_docs_sdk_python.md",
+    "size": 60435
+  },
+  {
+    "url": "https://cursor.com/docs/sdk/typescript",
+    "title": "Cursor TypeScript SDK | Cursor Documentation",
+    "file": "cursor.com_docs_sdk_typescript.md",
+    "size": 62868
+  },
+  {
+    "url": "https://cursor.com/docs/security-agents",
+    "title": "Security Agents | Cursor Docs",
+    "file": "cursor.com_docs_security-agents.md",
+    "size": 7050
+  },
+  {
+    "url": "https://cursor.com/docs/skills",
+    "title": "Agent Skills | Cursor Docs",
+    "file": "cursor.com_docs_skills.md",
+    "size": 13017
+  },
+  {
+    "url": "https://cursor.com/docs/subagents",
+    "title": "Subagents | Cursor Docs",
+    "file": "cursor.com_docs_subagents.md",
+    "size": 25698
   }
 ]

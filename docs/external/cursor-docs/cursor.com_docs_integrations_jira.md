@@ -1,0 +1,344 @@
+<!-- Source: https://cursor.com/docs/integrations/jira -->
+<!-- Title: Jira | Cursor Docs -->
+
+[Skip to main content](https://cursor.com/docs/integrations/jira#main-content)
+
+## Command Palette
+
+Search for a command to run...
+
+## Get Started
+
+[Welcome](https://cursor.com/docs) [Quickstart](https://cursor.com/docs/get-started/quickstart)
+Models & Pricing
+[Changelog](https://cursor.com/changelog)
+
+## Agent
+
+[Overview](https://cursor.com/docs/agent/overview) [Agents Window](https://cursor.com/docs/agent/agents-window) [Agent Review](https://cursor.com/docs/agent/agent-review) [Planning](https://cursor.com/docs/agent/plan-mode) [Prompting](https://cursor.com/docs/agent/prompting) [Debugging](https://cursor.com/docs/agent/debug-mode)
+Tools
+[Security](https://cursor.com/docs/agent/security)
+
+## Customizing
+
+[Plugins](https://cursor.com/docs/plugins) [Rules](https://cursor.com/docs/rules) [Skills](https://cursor.com/docs/skills) [Subagents](https://cursor.com/docs/subagents) [Hooks](https://cursor.com/docs/hooks) [MCP](https://cursor.com/docs/mcp)
+
+## Cloud Agents
+
+[Overview](https://cursor.com/docs/cloud-agent) [Setup](https://cursor.com/docs/cloud-agent/setup) [Capabilities](https://cursor.com/docs/cloud-agent/capabilities) [My Machines](https://cursor.com/docs/cloud-agent/my-machines) [Self-Hosted Pool](https://cursor.com/docs/cloud-agent/self-hosted-pool) [Google Cloud Run](https://cursor.com/docs/cloud-agent/self-hosted-cloud-run) [Bugbot](https://cursor.com/docs/bugbot) [Automations](https://cursor.com/docs/cloud-agent/automations) [Best Practices](https://cursor.com/docs/cloud-agent/best-practices) [Security Agents](https://cursor.com/docs/security-agents) [Security & Network](https://cursor.com/docs/cloud-agent/security-network) [Settings](https://cursor.com/docs/cloud-agent/settings) [API](https://cursor.com/docs/cloud-agent/api/endpoints)
+
+## Integrations
+
+[Slack](https://cursor.com/docs/integrations/slack) [Microsoft Teams](https://cursor.com/docs/integrations/microsoft-teams) [Jira](https://cursor.com/docs/integrations/jira) [Linear](https://cursor.com/docs/integrations/linear) [GitHub](https://cursor.com/docs/integrations/github) [GitLab](https://cursor.com/docs/integrations/gitlab) [JetBrains](https://cursor.com/docs/integrations/jetbrains) [Xcode](https://cursor.com/docs/integrations/xcode) [Deeplinks](https://cursor.com/docs/reference/deeplinks)
+
+## SDK
+
+[TypeScript](https://cursor.com/docs/sdk/typescript) [Python](https://cursor.com/docs/sdk/python)
+
+## CLI
+
+[Overview](https://cursor.com/docs/cli/overview) [Installation](https://cursor.com/docs/cli/installation) [Capabilities](https://cursor.com/docs/cli/using) [Shell Mode](https://cursor.com/docs/cli/shell-mode) [ACP](https://cursor.com/docs/cli/acp) [Headless / CI](https://cursor.com/docs/cli/headless)
+Reference
+
+## Teams & Enterprise
+
+Teams
+
+Enterprise
+
+Integrations
+
+# Jira
+
+With Cursor's integration for Jira, you can use [Cloud Agents](https://cursor.com/docs/cloud-agent) to work on Jira work items by assigning them to Cursor or mentioning `@Cursor` in Jira.
+
+media loading
+
+### Network Error
+
+A network error caused the media download to fail.
+
+
+
+PlayPause
+
+en0:00
+
+en0:00
+
+PlayPause10
+
+Seek backward
+10
+10
+
+Seek forward
+10
+0:00 / 0:00
+
+MuteUnmute
+
+Quality1x
+
+Playback rate
+
+Audio
+
+Captions
+
+start airplaystop airplay
+
+Start castingStop casting
+
+Enter picture in picture modeExit picture in picture mode
+
+Enter fullscreen modeExit fullscreen mode![](https://image.mux.com/9iixca73KMiQrMpHuFHwwBQAqGjBl0002NPoN4jSUJ2oo/thumbnail.webp)
+
+## [Get started](https://cursor.com/docs/integrations/jira\#get-started)
+
+### [Requirements](https://cursor.com/docs/integrations/jira\#requirements)
+
+Before you install the Jira integration, make sure you have:
+
+- Jira Commercial Cloud with Rovo enabled
+- Admin access to the Jira site where you want to install the app
+- Cursor admin access to the team you want to connect
+- GitHub or GitLab connected to Cursor for repository access and pull requests
+
+The Cursor Jira integration is currently available only on Cursor Teams and
+Enterprise plans.
+
+The Cursor Jira integration is not currently supported in Atlassian HIPAA or
+FedRAMP (including Government Cloud) instances.
+
+### [Installation](https://cursor.com/docs/integrations/jira\#installation)
+
+01. As a Cursor admin, go to [Cursor integrations](https://www.cursor.com/dashboard/integrations)
+
+02. Click _Connect_ next to Jira
+
+03. Continue to the Cursor app listing in the [Atlassian Marketplace](https://marketplace.atlassian.com/apps/3903220956/cursor)
+
+04. Click _Get it now_
+
+05. Select the Jira site where you want to install Cursor and click _Review_
+
+06. Review the app, then click _Get it now_
+
+07. Once installation completes, you should be dropped into the Cursor Jira app configuration page. Wait a few minutes for Atlassian to notify us of the installation, and then click the _Connect to Cursor_ button.
+
+08. Connect the Jira site to your Cursor team
+    - If you want to enable user-level authentication (which gives team members more visibility and control over their agents) instead of running agents with a service account, flip the _Require individual authentication_ toggle.
+09. Complete any remaining Cloud Agent setup in Cursor:
+    - Connect GitHub or GitLab
+    - Enable usage-based pricing
+    - Confirm privacy settings
+    - Choose a default repository, model, and base branch (under Cloud Agents settings in the Cursor Dashboard)
+10. Return to Jira and start using Cursor from a work item
+    - If you enabled user-level authentication, each user will need to do more set up below
+
+### [Authentication mode](https://cursor.com/docs/integrations/jira\#authentication-mode)
+
+You can choose how Jira authenticates Cloud Agents on the Cursor Jira integration admin dashboard by enabling the _Require individual authentication_ toggle.
+
+| Mode | How it works | Settings used |
+| --- | --- | --- |
+| Service account authentication | Cloud Agents run under a service account. | Uses only the team's Cloud Agent settings for routing, models, repositories, and defaults. |
+| User-level authentication | Runs all Cloud Agents under each user's account. | Uses each user's Cloud Agent settings for routing, models, repositories, and defaults. Also allows users to find their running agents under their account. |
+
+To connect each user:
+
+1. Kick off an agent on a Jira work item
+2. A prompt will appear to connect the account
+3. Follow the link to connect the Jira account to a Cursor account associated with the team
+4. Complete any remaining Cloud Agent setup in Cursor:
+   - Connect GitHub or GitLab if you haven't connected a repository provider yet
+   - Choose a default repository, model, and base branch (under _My Settings_ Cloud Agents settings in the Cursor Dashboard)
+
+## [How to use](https://cursor.com/docs/integrations/jira\#how-to-use)
+
+Open a Jira work item and then assign it to Cursor or mention `@Cursor` in a comment. Cursor uses the work item title, description, comments, and available repository settings to start a Cloud Agent.
+
+You can ask Cursor to fix bugs, add features, update tests, or investigate a task described in the work item.
+
+### [Delegating work items](https://cursor.com/docs/integrations/jira\#delegating-work-items)
+
+Assign a Jira work item to Cursor when the ticket already describes the task clearly.
+
+1. Open the Jira work item
+2. Click the assignee field
+3. Select Cursor
+4. Review the Cloud Agent that starts from the work item
+
+### [Mentioning Cursor](https://cursor.com/docs/integrations/jira\#mentioning-cursor)
+
+Mention `@Cursor` in a Jira comment when you want to add specific instructions. You can include a repository, branch, or model in the same comment.
+
+Examples:
+
+- `@Cursor please investigate this regression`
+- `@Cursor repo=acme/backend branch=release fix this before the release cut`
+- `@Cursor model=gpt-5.5 and update the related tests`
+
+### [Follow-up instructions](https://cursor.com/docs/integrations/jira\#follow-up-instructions)
+
+Open Rovo chat from the Jira work item to continue the conversation with Cursor.
+
+### [Status updates and handoff](https://cursor.com/docs/integrations/jira\#status-updates-and-handoff)
+
+When a Cloud Agent starts, Jira shows agent status on the work item. Cursor posts progress while it works and returns a summary when the task completes.
+
+If Cursor opens a pull request, the completion update links to the PR for review.
+
+## [Configuration](https://cursor.com/docs/integrations/jira\#configuration)
+
+Manage default settings and privacy options from [Dashboard -> Cloud Agents](https://www.cursor.com/dashboard/cloud-agents) under _Team Settings_ or _My Settings_.
+
+### [Settings](https://cursor.com/docs/integrations/jira\#settings)
+
+#### [Default model](https://cursor.com/docs/integrations/jira\#default-model)
+
+Used when no model is specified in the Jira work item or comment. See [settings](https://www.cursor.com/dashboard/cloud-agents) for available options.
+
+#### [Repository selection](https://cursor.com/docs/integrations/jira\#repository-selection)
+
+Cursor selects the repository based on:
+
+1. **Explicit values**: `repo`, `branch`, or `model` values in the Jira comment or work item
+2. **Work item content**: repository names, service names, or keywords in the title, description, and comments
+3. **Routing rules**: [custom keyword-to-repository mappings](https://cursor.com/docs/integrations/jira#routing-rules)
+4. **Recent agent activity**: repositories you've used recently
+5. **Default repository**: fallback when no match is found
+
+To use a specific repository, include it in your comment. For example: `@Cursor repo=acme/mobile-app fix the login bug`. Your team service account or user account (depending on the mode you have turned on) _must_ have access to this repo or else the attempt to kick off a Cloud Agent will fail.
+
+#### [Base branch](https://cursor.com/docs/integrations/jira\#base-branch)
+
+Starting branch for Cloud Agent. Leave blank to use the repository's default branch (recommended).
+
+#### [Branch prefix](https://cursor.com/docs/integrations/jira\#branch-prefix)
+
+Prefix for branch names created by Cloud Agents.
+
+### [Options](https://cursor.com/docs/integrations/jira\#options)
+
+Customize Cloud Agent behavior while using mentions with `@Cursor` with these options:
+
+| Option | Description | Example |
+| --- | --- | --- |
+| `repo` | Specify repository | `repo=acme/web-app` |
+| `branch` | Specify base branch | `branch=main` |
+| `model` | Specify model | `model=opus` |
+
+### [Routing rules](https://cursor.com/docs/integrations/jira\#routing-rules)
+
+Routing rules let you define keywords that automatically map to specific repositories. When a Jira work item or comment contains specific keywords, Cursor routes the Cloud Agent to the associated repository.
+
+Routing rules are the way you can tell the agent which projects, work items, key words, and other data should decide which repositories are used for which work items.
+
+#### [Setting up routing rules](https://cursor.com/docs/integrations/jira\#setting-up-routing-rules)
+
+1. Go to [Dashboard -> Cloud Agents](https://www.cursor.com/dashboard/cloud-agents)
+2. Find the **Routing Rules** section
+3. Add keyword-to-repository mappings
+
+#### [Example rules](https://cursor.com/docs/integrations/jira\#example-rules)
+
+| Keyword | Repository |
+| --- | --- |
+| `frontend` | `acme/web-app` |
+| `mobile` | `acme/mobile-app` |
+| `api` | `acme/backend-services` |
+| `docs` | `acme/documentation` |
+
+With these rules configured:
+
+- A work item titled `Fix the frontend nav bug` routes to `acme/web-app`
+- A comment saying `@Cursor update the mobile onboarding flow` routes to `acme/mobile-app`
+- A comment saying `@Cursor add rate limiting to the api` routes to `acme/backend-services`
+
+#### [How routing works](https://cursor.com/docs/integrations/jira\#how-routing-works)
+
+Cursor evaluates Jira work items and comments in this order:
+
+1. **Explicit values**: `repo`, `branch`, or `model` values in the Jira comment or work item
+2. **Work item content**: repository names, service names, or keywords in the title, description, and comments
+3. **Routing rules**: custom keyword-to-repository mappings
+4. **Recent agent activity**: repositories you've used recently
+5. **Default repository**: fallback when no match is found
+
+### [Privacy](https://cursor.com/docs/integrations/jira\#privacy)
+
+Cloud Agents support Privacy Mode.
+
+Read more about [Privacy Mode](https://www.cursor.com/privacy-overview) or manage your [privacy settings](https://www.cursor.com/dashboard/cloud-agents).
+
+Privacy Mode (Legacy) is not supported. Cloud Agents require temporary code
+storage while running.
+
+## [Permissions](https://cursor.com/docs/integrations/jira\#permissions)
+
+During installation, Jira shows the permissions requested by the Cursor app. Cursor uses these permissions to:
+
+- Identify the Jira user starting or managing a Cloud Agent
+- Read work item fields, descriptions, comments, and related context
+- Post status updates, completion summaries, and pull request links
+- Receive events when work items are assigned to Cursor or mention `@Cursor`
+
+Review the permission prompt in Atlassian Marketplace before installing the app.
+
+## [FAQ](https://cursor.com/docs/integrations/jira\#faq)
+
+### [Which Jira sites are supported?](https://cursor.com/docs/integrations/jira\#which-jira-sites-are-supported)
+
+The Cursor Jira integration supports Atlassian commercial cloud sites with Rovo enabled. Atlassian HIPAA, FedRAMP, and Government Cloud instances are not supported.
+
+### [Do I need usage-based billing?](https://cursor.com/docs/integrations/jira\#do-i-need-usage-based-billing)
+
+Yes. Cloud Agents require usage-based billing. Enable usage-based billing while completing Cloud Agent setup in Cursor.
+
+### [Who can install the Jira integration?](https://cursor.com/docs/integrations/jira\#who-can-install-the-jira-integration)
+
+A user that is both a Jira admin and Cursor team admin will need to do the initial setup.
+
+### [Do users need to connect their own Cursor accounts?](https://cursor.com/docs/integrations/jira\#do-users-need-to-connect-their-own-cursor-accounts)
+
+It depends on the authentication mode you choose. Service account authentication runs all Cloud Agents under a service account and uses team settings. User-level authentication connects each Jira user to Cursor, lets users find their running Cloud Agents from Jira in their Cursor dashboard, and uses each user's settings for routing, models, repositories, and defaults.
+
+### [What else needs to be set up before Cursor can create PRs?](https://cursor.com/docs/integrations/jira\#what-else-needs-to-be-set-up-before-cursor-can-create-prs)
+
+Connect GitHub or GitLab to Cursor and make sure Cloud Agent settings include the repositories, models, and base branches your team wants to use.
+
+### [How do users continue a conversation with Cursor?](https://cursor.com/docs/integrations/jira\#how-do-users-continue-a-conversation-with-cursor)
+
+Open Rovo chat from the Jira work item to continue the conversation with Cursor. Alternately, open the Cloud Agent in Cursor and continue the conversation there.
+
+## [Disclaimer](https://cursor.com/docs/integrations/jira\#disclaimer)
+
+Cursor can make mistakes. Please double-check code and responses.
+
+## [Privacy Policy](https://cursor.com/docs/integrations/jira\#privacy-policy)
+
+For information about how Cursor collects, uses, and protects your data, see our [Privacy Policy](https://cursor.com/privacy).
+
+English
+
+- English
+- 简体中文
+- 日本語
+- 繁體中文
+- Español
+- Français
+- Português
+- 한국어
+- Русский
+- Türkçe
+- Bahasa Indonesia
+- Deutsch
+- हिन्दी
+
+Agent
+
+Tokenizer OffContext: 0/200k (0%)
+
+Open chat
