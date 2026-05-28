@@ -33,7 +33,7 @@ NexFortis is invisible in organic search. The blog has 5 posts. Competitors with
 
 ### Proposed Solution
 
-v2 inverts the workflow. Instead of generating expertise on demand once a week, the system **continuously captures expertise Hassan is already producing every day** — Claude conversations, Perplexity research threads, Microsoft 365 emails, Teams call transcripts, ad-hoc voice notes — and embeds them into a searchable Supabase vector store. A nightly synthesis job clusters this raw material into article candidates. The Monday Telegram bot then operates in **journalist mode**: it walks into the interview already holding a folder of evidence, asking targeted, specific questions referencing real conversations and real problems Hassan worked on that week. SEOwind takes the resulting brief — primary keyword + SERP gaps + Hassan's captured expertise + his trained brand voice — and produces a draft that already sounds like him. A multi-stage quality gate (rule-based auto-reject + Clearscope independent re-scoring + Aleyda Solis's E-E-A-T GPT) catches thin content before it ever reaches Sanity. Hassan's review becomes a 5-minute confirmation, not a 30-minute rescue mission.
+v2 inverts the workflow. Instead of generating expertise on demand once a week, the system **continuously captures expertise Hassan is already producing every day** — Claude conversations, Perplexity research threads, Microsoft 365 emails, Teams call transcripts, ad-hoc voice notes — and embeds them into a searchable Supabase vector store. A nightly synthesis job clusters this raw material into article candidates. The Monday Telegram bot then operates in **journalist mode**: it walks into the interview already holding a folder of evidence, asking targeted, specific questions referencing real conversations and real problems Hassan worked on that week. Our gate worker then assembles a structured brief from the confirmed corpus evidence and delivers it to SEOwind via **Playwright browser automation** — filling in the keyword, location, project, and the full assembled insights block in SEOwind's "Your Insights and Instructions" field. SEOwind (which has no API — UI-only) generates the article using its SERP-grounded research pipeline plus Hassan's captured expertise and his project-level brand voice. A multi-stage quality gate (rule-based auto-reject + Clearscope independent re-scoring + Aleyda Solis's E-E-A-T GPT) catches thin content before it ever reaches Sanity. Hassan's review becomes a 5-minute confirmation, not a 30-minute rescue mission.
 
 ### Success Criteria
 
@@ -69,10 +69,10 @@ Each week's article was generated cold. Hassan could explain the same Conditiona
 | v1 Component | v2 Replacement | Why |
 |---|---|---|
 | Monday-only expertise extraction | Continuous capture from Claude, Perplexity, email, Teams, voice | Removes single point of failure; turns Hassan's existing workflow into raw material |
-| Frase as drafting tool | SEOwind as drafting tool | Structured fields for "Your own insights" + "Statistics & Quotes" + native Brand Voice; ★★★★ on information gain in original research |
+| Frase as drafting tool | SEOwind as drafting tool | "Your Insights and Instructions" field (single whole-article textarea) accepts captured corpus evidence; project-level Brand Voice auto-applied; SERP-grounded AI outline; ★★★★ on information gain in original research. Delivered via Playwright automation (no API exists). |
 | Generic interview questions | Journalist-mode interview with retrieved context | Bot reads from capture corpus before asking; questions cite specific Tuesday conversations and known errors |
 | Single quality scorer (Frase) | Three-stage gate: rule-based auto-reject + Clearscope + Aleyda Solis E-E-A-T GPT | Independent re-scoring catches false positives from any single tool |
-| Implicit brand voice | SEOwind Custom Brand Voice (Pro plan, $219/mo) | Trained on Hassan's existing technical writing; applied during generation, not post-hoc |
+| Implicit brand voice | SEOwind Brand Voice (Pro plan; set once in Projects UI) | Trained on Hassan's existing technical writing by pasting sample text into the Brand Voice setup UI (per knowledge map §4). Auto-applied to all briefs in the project. No per-brief override toggle for new article briefs. Tone tweaks delivered via the Insights field. |
 | No corpus | Supabase pgvector store of all captured signals | Compounds over time; same expertise reusable across articles; searchable, dateable, tagged |
 
 ### Why these changes will improve SEO outcomes specifically
@@ -111,7 +111,7 @@ Items deliberately excluded from v2 scope.
 | NG4 | Capturing every signal Hassan produces | Capture targets *technical-explanation* writing. Personal messages, family-law correspondence, mediation notes, and non-IT material are excluded by source filters. |
 | NG5 | Real-time capture (streaming) | Daily/nightly batch ingestion is sufficient and dramatically simpler than streaming pipelines. |
 | NG6 | Multi-user / team support | NexFortis remains a solo operation. No team features. |
-| NG7 | Replacing Hassan's expertise with model-generated facts | Capture corpus is the source of truth; SEOwind synthesizes, it does not invent. |
+| NG7 | Replacing Hassan's expertise with model-generated facts | Capture corpus is the source of truth for all insights injected via the "Your Insights and Instructions" field. SEOwind synthesizes and distributes expertise; it does not invent. |
 | NG8 | Publishing to LinkedIn as a full article | Blog stays canonical. Summaries only on LinkedIn. |
 | NG9 | Mac OS support for any agent or local tool | Not in Hassan's environment. |
 
@@ -241,11 +241,14 @@ nexfortis-content-pipeline/
                                                                      │
                     ┌────────────────────────────────────────────────▼─┐
                     │              SEOwind DRAFTING                    │
-                    │  - Keyword + SERP analysis                       │
-                    │  - "Your own insights" ← confirmed corpus chunks │
-                    │  - "Statistics & Quotes" ← specifics             │
-                    │  - Custom Brand Voice profile applied            │
-                    │  - Draft + SEOwind score                         │
+                    │  - Keyword + SERP analysis (SEOwind brief)       │
+                    │  - "Your Insights and Instructions" ← assembled  │
+                    │    corpus evidence (single textarea, whole-article)│
+                    │  - Project-level Brand Voice auto-applied         │
+                    │  - AI Outline from SERP data                     │
+                    │  - Async AI generation (10-15 min, Playwright     │
+                    │    polls for AI Editor redirect)                  │
+                    │  - Article extracted from AI Editor DOM           │
                     └────────────────────────────────────────────────┬─┘
                                                                      │
                     ┌────────────────────────────────────────────────▼─┐
@@ -301,7 +304,7 @@ Cost intentionally not factored — selected for output quality only.
 | Embeddings | OpenAI `text-embedding-3-large` | API | Best general-purpose embedding model; strong on technical vocab |
 | Synthesis LLM | Anthropic Claude Sonnet (latest) | API | Best long-context synthesis; question generation quality |
 | Interview channel | Telegram Bot | Self-hosted | Lowest friction; voice notes; free |
-| Drafting + voice | **SEOwind Pro** | $219/mo | Custom Brand Voice + "Your own insights" + "Statistics & Quotes" + AI Humanizer + Information Gain support |
+| Drafting + voice | **SEOwind Pro** | Platform plan $189/mo annually (per knowledge map §12.3; Hassan confirmed on Pro tier with Custom Insights available) | Playwright-delivered UI automation; "Your Insights and Instructions" textarea for corpus evidence; project-level Brand Voice (auto-applied, no per-brief override for new articles); SERP-grounded AI outline; AI Research + Review agents; async article generation (10–15 min). **No API exists — all automation via Playwright.** |
 | Independent re-scorer | **Clearscope** | Essentials | Best-in-class SERP-grounded scoring; ★★★★★ on expertise input in original research |
 | E-E-A-T pre-publish check | Aleyda Solis "Content Helpfulness and Quality SEO Analyzer" custom GPT | Free | Industry-respected E-E-A-T scoring |
 | CMS | Sanity | Free tier | Visual editor; API; 100K req/mo free |
@@ -314,8 +317,8 @@ Cost intentionally not factored — selected for output quality only.
 
 ### Tools deliberately dropped from v1
 
-- **Frase.io** — replaced by SEOwind. Reasoning in Section 2.
-- **Typeface / Writer.com** — redundant with SEOwind Custom Brand Voice; stacking would degrade fidelity.
+- **Frase.io** — replaced by SEOwind. Reasoning in Section 2. Key advantage: structured Insights field + SERP-grounded brief + Brand Voice in one tool. Key trade-off: no API — all automation via Playwright.
+- **Typeface / Writer.com** — redundant with SEOwind project-level Brand Voice; stacking would degrade fidelity.
 - **NeuronWriter as secondary scorer** — Clearscope is meaningfully better at the job.
 
 ---
@@ -328,7 +331,7 @@ The Epic decomposes into four Features. Each has its own Feature PRD.
 |---|---|---|---|---|
 | F1 | Continuous Capture & Synthesis Layer | Spec'd | `./capture-synthesis-layer/prd.md` | Hassan + Cursor/Claude |
 | F2 | Journalist-Mode Telegram Interview Bot | Spec'd | `./journalist-mode-interview/prd.md` | Hassan + Cursor/Claude |
-| F3 | SEOwind Drafting + Multi-Stage Quality Gate | Spec'd | `./seowind-drafting-quality-gate/prd.md` | Hassan + Cursor/Claude |
+| F3 | SEOwind Drafting + Multi-Stage Quality Gate | Spec'd (v2.0 — full rewrite, Playwright-only) | `./seowind-drafting-quality-gate/prd.md` | Hassan + Cursor/Claude |
 | F4 | Sanity Review & Publish Workflow | Spec'd | `./sanity-review-publish/prd.md` | Hassan + Cursor/Claude |
 
 **Sequencing:** F1 ships first (it is the foundation). F2 ships second (depends on F1). F3 and F4 can ship in parallel once F1 + F2 are in place. See `./implementation-roadmap.md` for full timeline.
@@ -361,14 +364,14 @@ Beyond the headline KPIs in Section 1, these operational metrics are tracked fro
 | # | Risk | Likelihood | Impact | Mitigation |
 |---|---|---|---|---|
 | R1 | Claude/Perplexity change export formats | Medium | Medium | Parser is versioned and tested against known fixture files. Manual fallback documented. |
-| R2 | SEOwind changes API or pricing | Low | High | Hand-off is via API; can fall back to Frase or Surfer if needed. Brand Voice profile re-trainable. |
+| R2 | SEOwind changes their UI | Medium | High | The Playwright script targets UI elements by text and role selectors where possible for resilience. On any selector failure, the script screenshots and alerts Hassan immediately. Monthly manual smoke-test of the Playwright flow recommended. If SEOwind changes the brief creation flow materially, the script requires a PR to update selectors. Brand Voice profile remains intact in the SEOwind project; only the automation selectors need updating. (Per knowledge map §12.4: no API exists, so an API-change risk does not apply.) |
 | R3 | Cursor/Claude Code drift across many prompts without full forward-context | Medium | Medium | Each prompt carries explicit strategic context, a decisions-already-made section, a future-context preview ("DO NOT modify X / DO NOT install Y because future prompts will"), an allowlist and blocklist of files, and a required Definition-of-Done checklist. PRs are reviewed by Hassan and Computer before merge. |
 | R4 | Microsoft Graph rate limits | Low | Medium | Token bucket + exponential backoff. Daily batch sizes well below limits for solo operator. |
 | R5 | PII in capture corpus (client names, emails) | High | High | Pre-embed PII redaction step using regex + LLM scrub. Manual review of any chunk before it enters article corpus. |
 | R6 | Synthesis surfaces wrong client as "example" | Medium | High | Bot always confirms client attribution as Yes/No question before draft pulls a chunk. |
 | R7 | Google core update penalizes the site | Low | Critical | Pillar discipline + human review + small volume + capture-grounded specifics. Recovery playbook in Section 10 of original research doc. |
 | R8 | Hassan ignores Monday bot for a month | Medium | Medium | Capture corpus keeps growing; bot can ask retrospective questions ("3 weeks ago you did X — still ok to use?"). Pipeline pauses publishing rather than publishing thin content. |
-| R9 | Capture pipeline cost exceeds expectation | Low | Low | All major costs are flat (SEOwind, Clearscope). Embedding cost is bounded; ~$5–15/mo at projected volume. |
+| R9 | Capture pipeline cost exceeds expectation | Low | Low | Major costs are flat: SEOwind Platform $189/mo annually (per knowledge map §12.3), Clearscope Essentials. Embedding cost is bounded; ~$5–15/mo at projected volume. |
 | R10 | Custody/family-law content accidentally captured | Low | Critical | Source filters exclude all family-law inbox folders, all conversations containing legal-counsel email addresses, all calls with mediator. Hard-coded blocklist enforced at ingest. |
 
 ---
@@ -382,7 +385,7 @@ Beyond the headline KPIs in Section 1, these operational metrics are tracked fro
 - **Feature PRDs:**
   - F1 Capture & Synthesis: `./capture-synthesis-layer/prd.md`
   - F2 Journalist Interview: `./journalist-mode-interview/prd.md`
-  - F3 SEOwind Drafting + Gate: `./seowind-drafting-quality-gate/prd.md`
+  - F3 SEOwind Drafting + Gate: `./seowind-drafting-quality-gate/prd.md` (v2.0 full rewrite — Playwright automation, no API)
   - F4 Sanity Publish: `./sanity-review-publish/prd.md`
 - **v1 Amendment Note:** `docs/content-pipeline/content-pipeline-prd.md` (v1.0, superseded — see amendment block at top of file)
 - **Original Research Sources:**

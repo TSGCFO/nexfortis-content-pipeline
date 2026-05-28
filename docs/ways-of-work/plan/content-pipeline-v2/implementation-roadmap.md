@@ -191,8 +191,8 @@ Goal: A real article published to nexfortis.com by end of week 6, with corpus gr
 **Objective:** A real draft article is produced, passes a manual quality check, and publishes to nexfortis.com.
 
 **Deliverables:**
-- SEOwind brief assembled manually by Hassan (or gate-worker stub that logs the brief without calling SEOwind API yet).
-- Hassan generates the draft in SEOwind manually using the brief as input.
+- Brief assembled by `brief-assembler.ts` + `insights-assembler.ts` from `confirmed_chunk_ids` (gate-worker stub may log the assembled `SEOwindBriefPayload` without running Playwright yet for Week 5 validation).
+- Hassan generates the draft in SEOwind manually using the assembled brief as input — copy `insightsText` to clipboard and paste into the "Your Insights and Instructions" field in the SEOwind UI; toggle on Company Details; use AI Outline generation. Note: SEOwind has no API; Playwright automation comes in Track 2 Phase B Week 7.
 - Stage A gate runs on the draft (automated).
 - Stage B: Hassan scores manually in Clearscope, enters via `/set_clearscope_score` command.
 - Stage C: Hassan runs Aleyda Solis GPT manually.
@@ -242,7 +242,7 @@ Goal: All components automated, hardened, and observable. Hassan's steady-state 
 | 1 | Repo scaffold + DB (same as Track 1 Week 1) | All 7 tables live; hello-world Inngest function registered |
 | 2 | Claude export + Perplexity export ingesters + redaction | ≥2 sources active; ≥100 signals embedded |
 | 3 | MS Graph email ingester (Prompt 3) | IT-topic emails from past 30 days ingested; family-law blocklist verified |
-| 4 | Teams transcripts ingester (Prompt 4); brand voice profile trained in SEOwind | All 4 Graph sources active; SEOwind brand voice profile ID stored in env var |
+| 4 | Teams transcripts ingester (Prompt 4); brand voice profile set up in SEOwind UI | All 4 Graph sources active; Hassan has manually created Brand Voice in SEOwind Projects tab (one-time UI setup — no env var for brand voice ID; brand voice is project-level and auto-applied, per knowledge map §4) |
 
 **Prompt to give to Cursor agent (Week 3 example):**
 ```
@@ -333,7 +333,7 @@ redaction pipeline, chunks, and embeds into capture_signals.
 |---|---|---|
 | 5 | Telegram bot confirmation questions with real corpus retrieval (Prompt 8) | Bot sends context-grounded questions; no generic questions |
 | 6 | Voice transcription pipeline hardened; Sunday→Monday session scheduling automated | Sessions open at 8 AM Eastern without manual trigger |
-| 7 | SEOwind brief automation (Prompt 9) — or Playwright fallback if no API | Brief assembled automatically from confirmed chunks |
+| 7 | SEOwind Playwright automation (Prompt 9) — Playwright is the only integration path; there is no API | Brief assembled by `brief-assembler.ts` + `insights-assembler.ts`; delivered to SEOwind UI by `seowind-playwright.ts` (login → create brief modal → async wait 1–4 min → fill insights textarea → generate article → async wait 10–15 min → extract from AI Editor DOM). Per knowledge map §12.4: SEOwind has no REST API, GraphQL, webhook, Zapier, Make.com, or n8n integration. |
 | 8 | First 5 articles drafted, gate A running, Sanity pipeline working | 5 articles published; ≥3 corpus citations each |
 
 **Phase B Definition of Done:**
