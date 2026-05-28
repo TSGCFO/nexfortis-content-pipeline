@@ -11,6 +11,7 @@
     { "path": "./artifacts/telegram-bot" },
     { "path": "./artifacts/gate-worker" },
     { "path": "./artifacts/sanity-bridge" },
-    { "path": "./tools/nfx-cowork-export" }
+    { "path": "./tools/nfx-cowork-export" },
+    { "path": "./tools/cursor-launch" }
   ]
 }

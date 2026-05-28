@@ -15,6 +15,13 @@
     "lint": "eslint .",
     "format": "prettier --write ."
   },
+  "pnpm": {
+    "onlyBuiltDependencies": [
+      "esbuild",
+      "protobufjs",
+      "sqlite3"
+    ]
+  },
   "devDependencies": {
     "@types/node": "^22.5.0",
     "@typescript-eslint/eslint-plugin": "^8.0.0",
