@@ -11,23 +11,26 @@
 
 ---
 
-## Open Questions for Hassan
+## Open Questions — Resolved
 
-These questions must be answered before the Playwright automation layer is built. They represent the top gaps the knowledge map (per knowledge map §10) could not resolve from the documentation alone.
+All seven open questions raised during the rewrite have been answered by Hassan. Captured here for traceability; the implementation must use these answers verbatim.
 
-1. **Insights field character limit** — The SEOwind docs show a free-text textarea but never state a maximum character count for the "Your Insights and Instructions" field (per knowledge map §10, item 1). Our assembled `insights_text` block could be 5,000–15,000 characters depending on how many chunks were confirmed. If there is a hard limit we do not know about, the automation will silently truncate. **Action needed: ask SEOwind support** — "What is the maximum character/word count for the Insights and Instructions textarea?"
+1. **Insights field character limit — RESOLVED.** Maximum is **15,000 characters**. The Custom Insights assembly module (§7) must enforce this as the hard cap. The assembled `insights_text` block is truncated at the assembly stage — never at the Playwright fill stage — so over-budget content is logged and visible in the database before any UI interaction.
 
-2. **MFA on your SEOwind account** — The docs mention only email/password login; no MFA/2FA is described in any of the 627 files (per knowledge map §6). If your account has 2FA enabled, the Playwright login step will hang on the MFA prompt. **Action needed: confirm whether your SEOwind account has two-factor authentication enabled.**
+2. **MFA on the SEOwind account — RESOLVED.** No MFA is enabled. The Playwright login flow uses email + password only. No MFA detection branch is required, but the implementation should still alert if login fails for any reason (e.g., expired session, password change).
 
-3. **"Higher volume plans available in-app"** — The current public pricing page lists Platform at $189/mo with 20 articles/month and "Higher volume plans available in-app" (per knowledge map §12.3). If you need more than 20 articles/month in steady state, there may be undocumented enterprise tiers. **Action needed: log in and check in-app plan options if publishing cadence exceeds 20/month.**
+3. **Publishing volume — RESOLVED.** No higher-volume SEOwind plan is needed. The project is intentionally capped at **5–6 articles per month** (per epic PRD §NG3: "More than 6 articles/month — Quality over volume; sudden volume spikes attract HCU scrutiny"). At ~1.5 briefs/week, we are at ~7.5% of the Platform plan's 20-article monthly capacity. **The volume cap is a deliberate HCU defense, not a SEOwind constraint.** Implementation must NOT add features that enable exceeding 6 articles/month without explicit policy review.
 
-4. **Content Update workflow per-update brand voice field** — The Content Update tab (separate from the article writer) accepts a per-update brand voice input (per knowledge map §12.1, Correction A; §12.5). Could this field be repurposed for new article briefs? Probably not — it is in a different UI workflow — but worth confirming with SEOwind support before we build the article writer automation.
+4. **Content Update workflow — RESOLVED.** Out of scope entirely. The Content Update tab is for refreshing existing published articles, not creating new ones. The F3 pipeline never invokes Content Update. The Playwright script never navigates to the Content Update tab. Any future content-refresh capability is a separate v2.x feature with its own PRD.
 
-5. **SEOwind brief URL schema** — The docs describe the "Open" action appearing on the dashboard row once a brief is created, but never document the URL pattern for individual brief or article pages (per knowledge map §6). The Playwright script will need to navigate to these URLs. **Action needed: log in and observe the browser URL bar when opening a brief and when the AI Editor opens, to confirm the URL patterns (expected: `/app/briefs/{id}` and `/app/articles/{id}`).**
+5. **SEOwind URL schema — RESOLVED.**
+   - **Brief detail page:** `https://seowind.io/app/brief/{uuid}/` (host is `seowind.io`, not `app.seowind.io`; the `id` is a UUID v4; trailing slash required).
+   - **Article editor page:** `https://seowind.io/app/dashboard/articleEditor/?id={uuid}&title={url-encoded-title}&description={url-encoded-meta-description}&isOnboardingBrief={bool}&hideArticle={bool}`. The article ID matches the brief ID (one-to-one). Title and description query params are URL-encoded. `isOnboardingBrief` and `hideArticle` are boolean flags — our pipeline always sees `isOnboardingBrief=false`.
+   - The Playwright module hardcodes both URL patterns. No discovery step is needed.
 
-6. **Outline editor DOM structure** — The outline editor is a rich interactive component (drag-and-drop, keyboard shortcuts, click-to-add from SERP data) with no exposed HTML attributes in any screenshot (per knowledge map §6). **Action needed: inspect the live DOM of the outline editor** to identify CSS selectors or data-attributes before building that automation step.
+6. **Outline editor UI mechanic — RESOLVED.** The outline editor uses **toggles**, NOT drag-and-drop. Earlier drafts of this PRD incorrectly described it as drag-and-drop with keyboard shortcuts — that was a knowledge-map error corrected by Hassan. **However, the implementation still does NOT touch the manual outline editor** — we rely entirely on SEOwind's AI Outline generation (per §5). The corrected toggle-based mechanic is documented here only so future contributors do not waste effort assuming drag-and-drop.
 
-7. **Rate limits on brief creation** — No documentation states how many briefs per hour or per day a Pro account may create. For our automated pipeline, creating multiple briefs in sequence is required. **Action needed: ask SEOwind support** — "Is there a rate limit on brief creation (briefs per hour/day per account)?"
+7. **Rate limits on brief creation — RESOLVED.** At 5–6 briefs/month (~1.5/week), rate limits are not a practical concern. No back-to-back brief creation occurs in the steady-state pipeline. No rate-limit handling is required in the v2 implementation. If a future feature ever creates briefs in rapid succession, this should be re-evaluated.
 
 ---
 
@@ -273,7 +276,7 @@ await page.click('[type=submit]'); // or button containing "Sign In"
 await page.waitForURL('**/app/**', { timeout: PLAYWRIGHT_TIMEOUT_MS });
 ```
 
-**MFA handling (OPEN QUESTION — see §Open Questions #2):** If MFA is enabled, the script will hang on the MFA prompt. The implementation must detect this: if after submitting credentials the URL has not changed to a dashboard URL within 10 seconds, check whether an MFA prompt element is visible on page. If so: pause, alert Hassan via Telegram with the session URL, and wait for human completion before resuming automation.
+**Login failure handling:** Hassan's account has no MFA (per §Open Questions Resolved #2). If after submitting credentials the URL has not changed to a dashboard URL within 10 seconds, the implementation must capture a screenshot, log the failure, and alert Hassan via Telegram with the screenshot path. Common causes: expired session, password change, account locked. The script does NOT attempt to retry login automatically — a single failed login halts the run.
 
 **Session persistence:** After first login, store the Playwright browser context (cookies + localStorage) to disk. On subsequent runs, attempt to restore the session. Only re-login if the session is expired (redirect back to login page on any navigation).
 
@@ -328,7 +331,7 @@ If timeout exceeded: mark `drafts.status = 'error_brief_timeout'`; alert Hassan;
 
 **Navigation:** Click "Open" on the dashboard row for this brief.
 
-Per knowledge map §6, the brief detail URL is not explicitly documented in the docs. The expected pattern is `/app/briefs/{id}` but this must be verified against the live app (see §Open Questions #5).
+The brief detail URL is hardcoded as `https://seowind.io/app/brief/{brief_uuid}/` (per §Open Questions Resolved #5). The article editor URL is `https://seowind.io/app/dashboard/articleEditor/?id={article_uuid}&title={url-encoded-title}&description={url-encoded-meta-description}&isOnboardingBrief=false&hideArticle=false`. Both URL patterns are constants in the Playwright module — no discovery step required at runtime.
 
 **Right panel — "Build your brief" (per knowledge map §12.5 Brief Building Section):**
 
@@ -338,7 +341,7 @@ Per knowledge map §6, the brief detail URL is not explicitly documented in the 
 4. **AI Outline:** If the outline is empty, click "Get AI Outline" button → in the popup modal, click "Select All" → click "Add selected" (per knowledge map §2 Step 10). This populates the outline with SERP-data-driven headings.
 5. **Verify AI Review & Refine Agent toggle:** Ensure this is ON (per knowledge map §11 recommendation: "AI Review & Refine Agent — always on").
 
-**We do NOT use the manual outline editor.** The rich WYSIWYG outline editor (drag-and-drop, keyboard shortcuts, ContentEditable) is the highest-complexity automation component (per knowledge map §6). We delegate outline generation to SEOwind's own SERP-driven AI Outline feature, which avoids that complexity. If our `article_candidates` row has a structured `outline_structure`, we may supplement after AI outline generation — but the default is AI outline only.
+**We do NOT use the manual outline editor.** The outline editor uses toggles to add or remove headings (NOT drag-and-drop — an earlier knowledge-map error that has been corrected; see §Open Questions Resolved #6). We delegate outline generation to SEOwind's own SERP-driven AI Outline feature, which avoids the entire manual-editor surface. The toggle-based mechanic is documented here only so future contributors do not waste effort on drag-and-drop automation. If our `article_candidates` row has a structured `outline_structure` in a future v2.x release, we will revisit — but the default is AI outline only.
 
 #### Async Wait 2: AI Article Generation (up to 15 minutes)
 
@@ -490,13 +493,13 @@ The AI does **not** simply append the insights — it **places them strategicall
 
 Custom Insights is available on Pro, Agency, and Enterprise plans (per knowledge map §12.2 Feature W3; per `seowind.io_custom-insights_.md`). Hassan is on Pro — this feature is confirmed available. The pipeline must not be built assuming Basic plan access.
 
-### Character Limit (OPEN QUESTION — see §Open Questions #1)
+### Character Limit — RESOLVED at 15,000 characters
 
-No documented character limit exists for the Insights textarea (per knowledge map §10, item 1). We do not know if pasting 10,000 characters will work or be truncated. Until Hassan confirms with SEOwind support:
+The Insights and Instructions textarea accepts up to **15,000 characters** (confirmed by Hassan; see §Open Questions Resolved #1). The Custom Insights assembly module enforces this as a hard cap.
 
-- **Conservative default:** assemble insights_text to ≤6,000 characters.
-- **If SEOwind support confirms a higher limit:** update `MAX_INSIGHTS_CHARS` constant in `brief-assembler.ts`.
-- **If no limit exists:** remove the cap and assemble the full corpus evidence.
+- **`MAX_INSIGHTS_CHARS = 15_000`** in `artifacts/gate-worker/src/integrations/insights-assembler.ts`.
+- Truncation happens at the assembly stage, never at the Playwright fill stage. Over-budget content is logged with the assembled length, the cap, and the count of confirmed chunks that did not fit. The truncation marker (e.g., `… [truncated: N additional chunks omitted]`) is appended to the assembled block so SEOwind sees a clean end-of-text.
+- The assembler greedy-fills in chunk-priority order until the next chunk would exceed the cap, then stops. Priority is: confirmed answers first, then follow-up answers, then evidence chunks in `captured_at DESC` order.
 
 ### Assembly Algorithm
 
@@ -506,7 +509,7 @@ No documented character limit exists for the Insights textarea (per knowledge ma
 export async function assembleInsightsText(
   confirmedChunkIds: string[],
   supabase: SupabaseClient,
-  maxChars: number = 6000
+  maxChars: number = MAX_INSIGHTS_CHARS // 15_000 — confirmed by Hassan with SEOwind
 ): Promise<string> {
   // 1. Fetch capture_signals rows for all confirmed chunk IDs
   const chunks = await fetchChunks(confirmedChunkIds, supabase);
