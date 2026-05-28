@@ -171,13 +171,19 @@ article_candidates ──► Claude Sonnet question gen ──► Telegram bot �
 
 DRAFTING LAYER (triggered by interview completion — gate-worker)
 ─────────────────────────────────────────────────────────────
-interview_sessions ──► SEOwind brief assembly ──► SEOwind draft ──► Gate A (rules)
-                                                                      │
-                                                              Gate B (Clearscope ≥80)
-                                                                      │
-                                                              Gate C (Aleyda GPT, manual)
-                                                                      │
-                                                             drafts (Supabase) ──► draft.gate_passed
+interview_sessions ──► brief-assembler.ts (builds SEOwindBriefPayload from DB)
+                   ──► insights-assembler.ts (assembles insightsText from confirmed_chunk_ids)
+                   ──► seowind-playwright.ts (Playwright UI automation — NO API exists)
+                          │  Login → Create brief modal → wait 1–4 min (async poll)
+                          │  Open brief → fill insights textarea → toggle company details
+                          │  Get AI Outline → Generate AI Article → wait 10–15 min (async poll)
+                          │  AI Editor opens → extract article text via DOM
+                          ▼
+                       Gate A (rule-based) → Gate B (Clearscope ≥80)
+                          │
+                       Gate C (Aleyda GPT, manual)
+                          │
+                       drafts (Supabase) ──► draft.gate_passed
 
 PUBLISH LAYER (triggered by gate_passed — sanity-bridge)
 ─────────────────────────────────────────────────────────────
@@ -381,10 +387,10 @@ CREATE TABLE drafts (
   candidate_id      UUID NOT NULL REFERENCES article_candidates(id),
   session_id        UUID REFERENCES interview_sessions(id),
   attempt_number    INTEGER NOT NULL DEFAULT 1,
-  seowind_brief     JSONB NOT NULL,                  -- assembled brief payload
-  seowind_draft_url TEXT,                            -- URL to draft in SEOwind
-  draft_text        TEXT,                            -- full draft text (stored if URL unreliable)
-  seowind_score     NUMERIC,
+  seowind_brief     JSONB NOT NULL,                  -- assembled brief payload (SEOwindBriefPayload shape; no API key or brand voice ID)
+  seowind_draft_url TEXT,                            -- URL to AI Editor page in SEOwind (e.g. /app/articles/{id}); extracted by Playwright
+  draft_text        TEXT,                            -- full article text extracted from AI Editor DOM by Playwright
+  seowind_score     JSONB,                           -- EEAT auto-score from AI Editor UI if extractable: { experience, expertise, authoritativeness, trustworthiness }; best-effort, nullable
   clearscope_score  NUMERIC,
   eeat_score        TEXT,                            -- Stage C qualitative result
   gate_a_failures   JSONB DEFAULT '[]',              -- array of GateAFailure objects
@@ -433,6 +439,14 @@ CREATE TABLE published_articles (
 
 CREATE INDEX idx_published_articles_slug ON published_articles(slug);
 CREATE INDEX idx_published_articles_published_at ON published_articles(published_at DESC);
+
+-- EEAT Score Checker results (added by F3 post-publish flow; per knowledge map §7, §12.2 Feature B)
+ALTER TABLE published_articles
+  ADD COLUMN IF NOT EXISTS eeat_scores JSONB DEFAULT NULL;
+  -- shape: { experience: 1-10, expertise: 1-10, authoritativeness: 1-10, trustworthiness: 1-10, checkedAt: ISO8601 }
+  -- populated by eeat-capture.ts after article is published to live URL
+  -- source: SEOwind EEAT Score Checker free tool at https://seowind.io/eeat-score-checker/
+  -- run time: under 60 seconds per seowind.io_eeat-score-checker_.md
 ```
 
 ---
@@ -569,12 +583,15 @@ SELECT pg_size_pretty(pg_relation_size('idx_capture_signals_embedding'));
 
 | Item | Detail |
 |---|---|
-| Plan | Pro ($219/month) |
-| Integration | Path A: REST API (`SEOWIND_API_KEY`); Path B: Playwright fallback |
-| Known risk | Public API surface as of May 2026 is limited; Path B may be required at launch |
-| Brand Voice ID | `SEOWIND_BRAND_VOICE_ID` — one-time setup by Hassan before first draft |
-| Error handling | API 5xx → retry once after 30s; Path B script failure → alert Hassan |
-| Fallback threshold | If Path B breaks due to UI change and cannot be fixed within 48h, pause drafting and alert Hassan |
+| Plan | Pro (per user confirmation; current public pricing: Platform $189/mo annually — per knowledge map §12.3) |
+| Integration | **Playwright browser automation only.** SEOwind has no REST API, GraphQL, webhook, Zapier, Make.com, or n8n integration — confirmed by exhaustive search of all 627 readable SEOwind docs (per knowledge map §12.4). |
+| API existence | None. `SEOWIND_API_KEY` and `SEOWIND_BRAND_VOICE_ID` env vars must NOT be created or referenced anywhere in this codebase. |
+| Brand Voice | Set once in SEOwind UI (Projects → Brand Voice) by Hassan. Auto-applied to all briefs in the project. No programmatic access needed or available (per knowledge map §4). |
+| Custom Insights | Available on Pro plan (confirmed). Single whole-article textarea in the brief's right panel. Playwright fills it with the assembled `insightsText` block (per knowledge map §3, §12.2 Feature W3). |
+| Async generation | Brief creation: 1–4 min wait (poll). Article generation: 10–15 min wait (poll for AI Editor URL redirect). No webhook or callback exists (per knowledge map §6, §12.4). |
+| Error handling | Playwright selector not found → screenshot + alert Hassan. Generation timeout → mark `error_generation_timeout` + alert. UI change suspected → halt + alert within 48h. |
+| MFA risk | Docs describe only email/password login. If Hassan's account has MFA, Playwright will detect the MFA prompt and alert Hassan to complete it manually (per knowledge map §6, Open Questions). |
+| Env vars | `SEOWIND_USERNAME`, `SEOWIND_PASSWORD`, `SEOWIND_PROJECT_ID`, `SEOWIND_BASE_URL`, `PLAYWRIGHT_HEADLESS`, `PLAYWRIGHT_TIMEOUT_MS`, `SEOWIND_ARTICLE_GENERATION_TIMEOUT_MS`, `SEOWIND_BRIEF_CREATION_TIMEOUT_MS` |
 
 ### 7.6 Clearscope
 
@@ -662,9 +679,17 @@ All variables set in Render's environment variable panel per service. Never in c
 | Variable | Description |
 |---|---|
 | `OPENAI_API_KEY` | For Stage C Custom GPT API attempt |
-| `SEOWIND_API_KEY` | SEOwind Pro API key |
-| `SEOWIND_BRAND_VOICE_ID` | Pre-trained brand voice profile ID |
+| `SEOWIND_USERNAME` | SEOwind account email (Playwright login) |
+| `SEOWIND_PASSWORD` | SEOwind account password (Playwright login) |
+| `SEOWIND_PROJECT_ID` | SEOwind project ID — set once after Hassan creates the NexFortis project in the UI |
+| `SEOWIND_BASE_URL` | `https://seowind.io` (allows override if SEOwind changes domain) |
+| `PLAYWRIGHT_HEADLESS` | `true` in production; `false` for local debugging |
+| `PLAYWRIGHT_TIMEOUT_MS` | Default `30000` (30s) for page-level Playwright operations |
+| `SEOWIND_ARTICLE_GENERATION_TIMEOUT_MS` | Default `900000` (15 min) for AI article generation async wait |
+| `SEOWIND_BRIEF_CREATION_TIMEOUT_MS` | Default `300000` (5 min) for brief processing async wait |
 | `CLEARSCOPE_API_KEY` | Clearscope API key |
+
+> **Note:** `SEOWIND_API_KEY` and `SEOWIND_BRAND_VOICE_ID` do not exist and must never be added. SEOwind has no API. Brand voice is project-level, UI-managed (per knowledge map §12.4, §4).
 
 ### sanity-bridge
 
