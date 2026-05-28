@@ -6,7 +6,8 @@
   "description": "Reusable launcher for Cursor Cloud Agents targeting the nexfortis-content-pipeline repo. The only thing that changes per run is the prompt.",
   "main": "./dist/index.js",
   "bin": {
-    "nfx-cursor-launch": "./dist/cli.js"
+    "nfx-cursor-launch": "./dist/cli.js",
+    "nfx-cursor-list-models": "./dist/list-models.js"
   },
   "scripts": {
     "build": "tsc --build",

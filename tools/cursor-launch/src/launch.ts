@@ -9,20 +9,48 @@
 // which causes any import of this file (e.g. for `--help` or for type
 // re-exports from `index.ts`) to fail in environments where those bindings
 // haven't been built. We import lazily inside `launchCursorAgent` instead.
-import type { SDKAgent, Run } from '@cursor/sdk';
+import type { SDKAgent, Run, McpServerConfig } from '@cursor/sdk';
 
 import { CURSOR_LAUNCH_CONFIG, REQUIRED_ENV } from './config.js';
+import { resolveModel } from './resolve-model.js';
 
 export interface LaunchOptions {
-  /** The prompt to send to the cloud agent. This is the ONLY thing that changes per run. */
+  /** The prompt to send to the cloud agent. This is the ONLY required field. */
   prompt: string;
 
   /**
    * Behaviour after the agent is launched:
    *  - 'verify-started' (default): wait until status transitions from CREATING → RUNNING, then exit
-   *  - 'wait-for-completion': block until the run terminates (status = finished | error | cancelled)
+   *  - 'wait-for-completion': block until the run terminates
    */
   mode?: 'verify-started' | 'wait-for-completion';
+
+  /** Override the model. If undefined, the launcher resolves from CURSOR_LAUNCH_CONFIG.modelPreferenceOrder. */
+  modelId?: string;
+
+  /** Additional model params (e.g. thinking=high). Merged with defaults if model accepts them. */
+  modelParams?: Array<{ id: string; value: string }>;
+
+  /**
+   * Attach to an existing PR. When set:
+   *  - `repos[0].prUrl` is sent to Cursor
+   *  - `workOnCurrentBranch` is automatically set to `true` so commits push
+   *    back to the PR's existing branch (matches the established workflow:
+   *    follow-up prompts update the same PR).
+   */
+  prUrl?: string;
+
+  /** Session-scoped env vars injected into the cloud VM (beta feature in Cursor). */
+  envVars?: Record<string, string>;
+
+  /** Inline MCP server defs available to the agent for this run. */
+  mcpServers?: Record<string, McpServerConfig>;
+
+  /** Human-readable agent label that shows in Cursor Web's list. */
+  name?: string;
+
+  /** Initial conversation mode. 'plan' = research first, 'agent' = implement directly. */
+  conversationMode?: 'agent' | 'plan';
 }
 
 export interface LaunchResult {
@@ -30,6 +58,8 @@ export interface LaunchResult {
   runId: string;
   cursorWebUrl: string;
   verifiedRunning: boolean;
+  /** Model + params actually used (after resolution). */
+  resolvedModel: { id: string; params?: Array<{ id: string; value: string }> };
   /** Only set when mode = 'wait-for-completion' */
   finalStatus?: 'finished' | 'error' | 'cancelled';
   /** Only set when mode = 'wait-for-completion' */
@@ -54,10 +84,11 @@ const defaultLogger: LaunchLogger = {
 
 /**
  * Launches a Cursor cloud agent against the NexFortis content-pipeline repo
- * with the given prompt. All other parameters (model, repo, starting ref,
- * auto-PR) come from `config.ts`.
+ * with the given prompt. Everything else (model, repo, starting ref, auto-PR,
+ * MCP servers, env vars, PR attach) can be overridden via LaunchOptions.
  *
  * @throws if `CURSOR_API_KEY` env var is missing or empty
+ * @throws if no preferred model is available and no override was given
  * @throws if the cloud agent fails to leave CREATING within the verify timeout
  *         (only in 'verify-started' mode)
  */
@@ -78,30 +109,77 @@ export async function launchCursorAgent(
 
   const mode = options.mode ?? 'verify-started';
 
-  logger.info(`Creating cloud agent...`);
-  logger.info(`  model:       ${CURSOR_LAUNCH_CONFIG.modelId}`);
-  logger.info(`  repo:        ${CURSOR_LAUNCH_CONFIG.repoUrl}`);
-  logger.info(`  starting:    ${CURSOR_LAUNCH_CONFIG.startingRef}`);
-  logger.info(`  autoCreatePR: ${CURSOR_LAUNCH_CONFIG.autoCreatePR}`);
-  logger.info(`  promptChars: ${options.prompt.length}`);
+  // Resolve model (may call Cursor.models.list() if no explicit override).
+  // Build incrementally to satisfy exactOptionalPropertyTypes.
+  const resolveInput: import('./resolve-model.js').ResolveModelInput = { apiKey };
+  if (options.modelId) resolveInput.modelId = options.modelId;
+  if (options.modelParams) resolveInput.modelParams = options.modelParams;
+  const modelResolution = await resolveModel(resolveInput, logger);
+  logger.info(`Model: ${modelResolution.selection.id} (${modelResolution.rationale})`);
 
-  // Lazy import — see note at top of file. Type-only import above is erased
-  // at runtime so this is the first real load of @cursor/sdk.
+  // Build cloud options
+  const startingRef = options.prUrl ? undefined : CURSOR_LAUNCH_CONFIG.startingRef;
+  const repoEntry: { url: string; startingRef?: string; prUrl?: string } = {
+    url: CURSOR_LAUNCH_CONFIG.repoUrl,
+  };
+  if (startingRef) repoEntry.startingRef = startingRef;
+  if (options.prUrl) repoEntry.prUrl = options.prUrl;
+
+  // workOnCurrentBranch: when attached to a PR, push commits back to the
+  // PR's existing branch (rather than spawning a new cursor/... branch).
+  // This matches the established workflow: fixup prompts update the same PR.
+  const workOnCurrentBranch = options.prUrl ? true : false;
+
+  logger.info(`Creating cloud agent...`);
+  logger.info(`  repo:               ${CURSOR_LAUNCH_CONFIG.repoUrl}`);
+  if (options.prUrl) {
+    logger.info(`  attaching to PR:    ${options.prUrl}`);
+    logger.info(`  workOnCurrentBranch: true (auto-set because --pr-url was passed)`);
+  } else {
+    logger.info(`  starting ref:       ${CURSOR_LAUNCH_CONFIG.startingRef}`);
+  }
+  logger.info(`  autoCreatePR:       ${CURSOR_LAUNCH_CONFIG.autoCreatePR}`);
+  if (options.name) logger.info(`  agent name:         ${options.name}`);
+  if (options.conversationMode) logger.info(`  conversation mode:  ${options.conversationMode}`);
+  if (options.mcpServers && Object.keys(options.mcpServers).length > 0) {
+    logger.info(`  MCP servers:        ${Object.keys(options.mcpServers).join(', ')}`);
+  }
+  if (options.envVars && Object.keys(options.envVars).length > 0) {
+    logger.info(`  session env vars:   ${Object.keys(options.envVars).join(', ')} (values redacted)`);
+  }
+  logger.info(`  promptChars:        ${options.prompt.length}`);
+
+  // Lazy import — see note at top of file.
   const { Agent } = await import('@cursor/sdk');
 
-  const agent: SDKAgent = await Agent.create({
+  // Build the Agent.create payload. The SDK is strict about exactOptionalPropertyTypes
+  // so we build it incrementally.
+  const cloudOpts: {
+    repos: Array<{ url: string; startingRef?: string; prUrl?: string }>;
+    autoCreatePR: boolean;
+    workOnCurrentBranch?: boolean;
+    envVars?: Record<string, string>;
+  } = {
+    repos: [repoEntry],
+    autoCreatePR: CURSOR_LAUNCH_CONFIG.autoCreatePR,
+  };
+  if (workOnCurrentBranch) cloudOpts.workOnCurrentBranch = true;
+  if (options.envVars && Object.keys(options.envVars).length > 0) {
+    cloudOpts.envVars = options.envVars;
+  }
+
+  const createPayload: Parameters<typeof Agent.create>[0] = {
     apiKey,
-    model: { id: CURSOR_LAUNCH_CONFIG.modelId },
-    cloud: {
-      repos: [
-        {
-          url: CURSOR_LAUNCH_CONFIG.repoUrl,
-          startingRef: CURSOR_LAUNCH_CONFIG.startingRef,
-        },
-      ],
-      autoCreatePR: CURSOR_LAUNCH_CONFIG.autoCreatePR,
-    },
-  });
+    model: modelResolution.selection,
+    cloud: cloudOpts,
+  };
+  if (options.name) createPayload.name = options.name;
+  if (options.conversationMode) createPayload.mode = options.conversationMode;
+  if (options.mcpServers && Object.keys(options.mcpServers).length > 0) {
+    createPayload.mcpServers = options.mcpServers;
+  }
+
+  const agent: SDKAgent = await Agent.create(createPayload);
 
   const agentId = agent.agentId;
   const cursorWebUrl = `${CURSOR_LAUNCH_CONFIG.cursorWebUrlBase}/${agentId}`;
@@ -113,33 +191,25 @@ export async function launchCursorAgent(
   const runId = run.id;
   logger.info(`Run started: ${runId}`);
 
-  // Verify the cloud agent has actually started. We listen for SDKStatusMessage
-  // events on the stream — Cursor emits CREATING when VM provisioning starts and
-  // RUNNING once the agent is actually doing work.
-  //
-  // The user explicitly asked: "wait for verification that the agent was
-  // launched properly and has actually started a session". Just getting an
-  // agentId back from Agent.create is not enough — the VM could still fail
-  // to provision. We need a RUNNING status before declaring success.
-
   const result: LaunchResult = {
     agentId,
     runId,
     cursorWebUrl,
     verifiedRunning: false,
+    resolvedModel: modelResolution.selection.params
+      ? { id: modelResolution.selection.id, params: [...modelResolution.selection.params] }
+      : { id: modelResolution.selection.id },
   };
 
   if (mode === 'verify-started') {
     await verifyRunning(run, logger, CURSOR_LAUNCH_CONFIG.verifyTimeoutMs);
     result.verifiedRunning = true;
     logger.info(`Verified: cloud agent is RUNNING`);
-    // Close the agent handle. The cloud agent itself keeps running on
-    // Cursor's infra — close() just releases our local connection.
     agent.close();
     return result;
   }
 
-  // wait-for-completion mode: block on the run and surface git/result info
+  // wait-for-completion mode
   logger.info(`Waiting for run to complete (this can take many minutes)...`);
   for await (const event of run.stream()) {
     if (event.type === 'status') {
@@ -147,9 +217,6 @@ export async function launchCursorAgent(
       if (event.status === 'RUNNING') {
         result.verifiedRunning = true;
       }
-    } else if (event.type === 'assistant') {
-      // Don't log every assistant chunk — too noisy. Just log that text arrived.
-      // The full conversation can be retrieved via run.conversation() later.
     } else if (event.type === 'task' && event.text) {
       logger.info(`task: ${event.text}`);
     }
@@ -220,8 +287,7 @@ async function verifyRunning(run: Run, logger: LaunchLogger, timeoutMs: number):
             return;
           }
           if (event.status === 'FINISHED') {
-            // Edge case: extremely short run that finished before we observed RUNNING.
-            // Treat as success — the agent did its job.
+            // Extremely short run finished before we observed RUNNING.
             if (resolved) return;
             resolved = true;
             clearTimeout(timer);
@@ -230,8 +296,6 @@ async function verifyRunning(run: Run, logger: LaunchLogger, timeoutMs: number):
             return;
           }
         }
-        // Stream ended without a definitive status. This shouldn't happen on
-        // a healthy cloud agent, but guard against it.
         if (!resolved) {
           resolved = true;
           clearTimeout(timer);
