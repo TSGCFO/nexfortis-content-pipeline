@@ -17,9 +17,7 @@
   },
   "pnpm": {
     "onlyBuiltDependencies": [
-      "esbuild",
-      "protobufjs",
-      "sqlite3"
+      "esbuild"
     ]
   },
   "devDependencies": {

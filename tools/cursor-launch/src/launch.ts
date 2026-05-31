@@ -1,26 +1,29 @@
 /**
- * Core launch logic. Pure function, no CLI/process concerns — easy to test
- * and easy to reuse from other scripts later (e.g. an auto-launcher that
- * reads prompts from a queue).
+ * Core launch logic. Pure function, no CLI/process concerns.
+ *
+ * Talks to Cursor via plain HTTPS (fetch). Authentication is supplied either by:
+ *  - `CURSOR_API_KEY` env var (set explicitly by the caller), OR
+ *  - The credential proxy (`api_credentials=['custom-cred:api.cursor.com']` on
+ *    the surrounding bash call), in which case no env var is needed and the
+ *    API key never enters this process.
+ *
+ * Verified against docs/external/cursor-docs/cursor.com_docs_cloud-agent_api_endpoints.md
+ * and the live /v1/models response in docs/external/cursor-models.json.
  */
 
-// NOTE: We deliberately do NOT static-import `@cursor/sdk` at the top of
-// this file. The SDK pulls in native bindings (sqlite3) at module load,
-// which causes any import of this file (e.g. for `--help` or for type
-// re-exports from `index.ts`) to fail in environments where those bindings
-// haven't been built. We import lazily inside `launchCursorAgent` instead.
-import type { SDKAgent, Run, McpServerConfig } from '@cursor/sdk';
-
-import { CURSOR_LAUNCH_CONFIG, REQUIRED_ENV } from './config.js';
+import { CURSOR_LAUNCH_CONFIG } from './config.js';
+import { createAgent, getRun } from './cursor-api.js';
 import { resolveModel } from './resolve-model.js';
 
+import type { CreateAgentRequest, McpServerDef, RunStatus } from './types.js';
+
 export interface LaunchOptions {
-  /** The prompt to send to the cloud agent. This is the ONLY required field. */
+  /** The prompt to send to the cloud agent. */
   prompt: string;
 
   /**
-   * Behaviour after the agent is launched:
-   *  - 'verify-started' (default): wait until status transitions from CREATING → RUNNING, then exit
+   * Behaviour after launch:
+   *  - 'verify-started' (default): wait until status transitions CREATING -> RUNNING, then exit
    *  - 'wait-for-completion': block until the run terminates
    */
   mode?: 'verify-started' | 'wait-for-completion';
@@ -28,29 +31,31 @@ export interface LaunchOptions {
   /** Override the model. If undefined, the launcher resolves from CURSOR_LAUNCH_CONFIG.modelPreferenceOrder. */
   modelId?: string;
 
-  /** Additional model params (e.g. thinking=high). Merged with defaults if model accepts them. */
+  /** Additional model params. Merged with defaults; CLI params win on conflict. */
   modelParams?: Array<{ id: string; value: string }>;
 
   /**
    * Attach to an existing PR. When set:
-   *  - `repos[0].prUrl` is sent to Cursor
+   *  - `repos[0].prUrl` is sent in the create body
    *  - `workOnCurrentBranch` is automatically set to `true` so commits push
-   *    back to the PR's existing branch (matches the established workflow:
-   *    follow-up prompts update the same PR).
+   *    back to the PR's existing branch (fixup workflow).
    */
   prUrl?: string;
 
-  /** Session-scoped env vars injected into the cloud VM (beta feature in Cursor). */
+  /** Session-scoped env vars injected into the cloud VM (beta in Cursor). */
   envVars?: Record<string, string>;
 
-  /** Inline MCP server defs available to the agent for this run. */
-  mcpServers?: Record<string, McpServerConfig>;
+  /** Inline MCP server definitions for this run. */
+  mcpServers?: McpServerDef[];
 
-  /** Human-readable agent label that shows in Cursor Web's list. */
+  /** Human-readable agent label in Cursor Web. */
   name?: string;
 
-  /** Initial conversation mode. 'plan' = research first, 'agent' = implement directly. */
+  /** Initial conversation mode. */
   conversationMode?: 'agent' | 'plan';
+
+  /** Skip requesting the user as PR reviewer. */
+  skipReviewerRequest?: boolean;
 }
 
 export interface LaunchResult {
@@ -58,10 +63,9 @@ export interface LaunchResult {
   runId: string;
   cursorWebUrl: string;
   verifiedRunning: boolean;
-  /** Model + params actually used (after resolution). */
   resolvedModel: { id: string; params?: Array<{ id: string; value: string }> };
   /** Only set when mode = 'wait-for-completion' */
-  finalStatus?: 'finished' | 'error' | 'cancelled';
+  finalStatus?: RunStatus;
   /** Only set when mode = 'wait-for-completion' */
   prUrl?: string;
   /** Only set when mode = 'wait-for-completion' */
@@ -83,54 +87,57 @@ const defaultLogger: LaunchLogger = {
 };
 
 /**
- * Launches a Cursor cloud agent against the NexFortis content-pipeline repo
- * with the given prompt. Everything else (model, repo, starting ref, auto-PR,
- * MCP servers, env vars, PR attach) can be overridden via LaunchOptions.
- *
- * @throws if `CURSOR_API_KEY` env var is missing or empty
- * @throws if no preferred model is available and no override was given
- * @throws if the cloud agent fails to leave CREATING within the verify timeout
- *         (only in 'verify-started' mode)
+ * Launches a Cursor cloud agent against the NexFortis content-pipeline repo.
  */
 export async function launchCursorAgent(
   options: LaunchOptions,
   logger: LaunchLogger = defaultLogger,
 ): Promise<LaunchResult> {
-  const apiKey = process.env[REQUIRED_ENV.cursorApiKey];
-  if (!apiKey) {
-    throw new Error(
-      `Missing required env var: ${REQUIRED_ENV.cursorApiKey}. ` +
-        `Set it before running this script.`,
-    );
-  }
   if (!options.prompt || options.prompt.trim().length === 0) {
     throw new Error('prompt must be a non-empty string');
   }
 
   const mode = options.mode ?? 'verify-started';
 
-  // Resolve model (may call Cursor.models.list() if no explicit override).
-  // Build incrementally to satisfy exactOptionalPropertyTypes.
-  const resolveInput: import('./resolve-model.js').ResolveModelInput = { apiKey };
+  // Resolve model
+  const resolveInput: import('./resolve-model.js').ResolveModelInput = {};
   if (options.modelId) resolveInput.modelId = options.modelId;
   if (options.modelParams) resolveInput.modelParams = options.modelParams;
   const modelResolution = await resolveModel(resolveInput, logger);
   logger.info(`Model: ${modelResolution.selection.id} (${modelResolution.rationale})`);
 
-  // Build cloud options
-  const startingRef = options.prUrl ? undefined : CURSOR_LAUNCH_CONFIG.startingRef;
+  // Build repo entry
   const repoEntry: { url: string; startingRef?: string; prUrl?: string } = {
     url: CURSOR_LAUNCH_CONFIG.repoUrl,
   };
-  if (startingRef) repoEntry.startingRef = startingRef;
-  if (options.prUrl) repoEntry.prUrl = options.prUrl;
+  if (options.prUrl) {
+    repoEntry.prUrl = options.prUrl;
+  } else {
+    repoEntry.startingRef = CURSOR_LAUNCH_CONFIG.startingRef;
+  }
 
-  // workOnCurrentBranch: when attached to a PR, push commits back to the
-  // PR's existing branch (rather than spawning a new cursor/... branch).
-  // This matches the established workflow: fixup prompts update the same PR.
+  // workOnCurrentBranch: auto-true when attached to PR so commits push back
   const workOnCurrentBranch = options.prUrl ? true : false;
 
-  logger.info(`Creating cloud agent...`);
+  // Build create-agent body incrementally
+  const body: CreateAgentRequest = {
+    prompt: { text: options.prompt },
+    model: modelResolution.selection,
+    repos: [repoEntry],
+    autoCreatePR: CURSOR_LAUNCH_CONFIG.autoCreatePR,
+  };
+  if (workOnCurrentBranch) body.workOnCurrentBranch = true;
+  if (options.name) body.name = options.name;
+  if (options.conversationMode) body.mode = options.conversationMode;
+  if (options.skipReviewerRequest) body.skipReviewerRequest = true;
+  if (options.envVars && Object.keys(options.envVars).length > 0) {
+    body.envVars = options.envVars;
+  }
+  if (options.mcpServers && options.mcpServers.length > 0) {
+    body.mcpServers = options.mcpServers;
+  }
+
+  logger.info(`Creating cloud agent (POST /v1/agents)...`);
   logger.info(`  repo:               ${CURSOR_LAUNCH_CONFIG.repoUrl}`);
   if (options.prUrl) {
     logger.info(`  attaching to PR:    ${options.prUrl}`);
@@ -141,59 +148,25 @@ export async function launchCursorAgent(
   logger.info(`  autoCreatePR:       ${CURSOR_LAUNCH_CONFIG.autoCreatePR}`);
   if (options.name) logger.info(`  agent name:         ${options.name}`);
   if (options.conversationMode) logger.info(`  conversation mode:  ${options.conversationMode}`);
-  if (options.mcpServers && Object.keys(options.mcpServers).length > 0) {
-    logger.info(`  MCP servers:        ${Object.keys(options.mcpServers).join(', ')}`);
+  if (options.skipReviewerRequest) logger.info(`  skipReviewerRequest: true`);
+  if (body.mcpServers) {
+    logger.info(`  MCP servers:        ${body.mcpServers.map((s) => s.name).join(', ')}`);
   }
-  if (options.envVars && Object.keys(options.envVars).length > 0) {
-    logger.info(`  session env vars:   ${Object.keys(options.envVars).join(', ')} (values redacted)`);
+  if (body.envVars) {
+    logger.info(`  session env vars:   ${Object.keys(body.envVars).join(', ')} (values redacted)`);
   }
   logger.info(`  promptChars:        ${options.prompt.length}`);
 
-  // Lazy import — see note at top of file.
-  const { Agent } = await import('@cursor/sdk');
-
-  // Build the Agent.create payload. The SDK is strict about exactOptionalPropertyTypes
-  // so we build it incrementally.
-  const cloudOpts: {
-    repos: Array<{ url: string; startingRef?: string; prUrl?: string }>;
-    autoCreatePR: boolean;
-    workOnCurrentBranch?: boolean;
-    envVars?: Record<string, string>;
-  } = {
-    repos: [repoEntry],
-    autoCreatePR: CURSOR_LAUNCH_CONFIG.autoCreatePR,
-  };
-  if (workOnCurrentBranch) cloudOpts.workOnCurrentBranch = true;
-  if (options.envVars && Object.keys(options.envVars).length > 0) {
-    cloudOpts.envVars = options.envVars;
-  }
-
-  const createPayload: Parameters<typeof Agent.create>[0] = {
-    apiKey,
-    model: modelResolution.selection,
-    cloud: cloudOpts,
-  };
-  if (options.name) createPayload.name = options.name;
-  if (options.conversationMode) createPayload.mode = options.conversationMode;
-  if (options.mcpServers && Object.keys(options.mcpServers).length > 0) {
-    createPayload.mcpServers = options.mcpServers;
-  }
-
-  const agent: SDKAgent = await Agent.create(createPayload);
-
-  const agentId = agent.agentId;
-  const cursorWebUrl = `${CURSOR_LAUNCH_CONFIG.cursorWebUrlBase}/${agentId}`;
-  logger.info(`Agent created: ${agentId}`);
+  const createResponse = await createAgent(body);
+  const { agent, run } = createResponse;
+  const cursorWebUrl =
+    agent.url ?? `${CURSOR_LAUNCH_CONFIG.cursorWebUrlBase}/${agent.id}`;
+  logger.info(`Agent created: ${agent.id} (initial run status: ${run.status})`);
   logger.info(`Cursor Web URL: ${cursorWebUrl}`);
 
-  logger.info(`Sending prompt...`);
-  const run: Run = await agent.send(options.prompt);
-  const runId = run.id;
-  logger.info(`Run started: ${runId}`);
-
   const result: LaunchResult = {
-    agentId,
-    runId,
+    agentId: agent.id,
+    runId: run.id,
     cursorWebUrl,
     verifiedRunning: false,
     resolvedModel: modelResolution.selection.params
@@ -202,111 +175,120 @@ export async function launchCursorAgent(
   };
 
   if (mode === 'verify-started') {
-    await verifyRunning(run, logger, CURSOR_LAUNCH_CONFIG.verifyTimeoutMs);
+    await verifyRunning(agent.id, run.id, run.status, logger, CURSOR_LAUNCH_CONFIG.verifyTimeoutMs);
     result.verifiedRunning = true;
     logger.info(`Verified: cloud agent is RUNNING`);
-    agent.close();
     return result;
   }
 
-  // wait-for-completion mode
-  logger.info(`Waiting for run to complete (this can take many minutes)...`);
-  for await (const event of run.stream()) {
-    if (event.type === 'status') {
-      logger.info(`status -> ${event.status}${event.message ? ` (${event.message})` : ''}`);
-      if (event.status === 'RUNNING') {
-        result.verifiedRunning = true;
-      }
-    } else if (event.type === 'task' && event.text) {
-      logger.info(`task: ${event.text}`);
+  // wait-for-completion mode — poll until terminal status. (SSE is documented
+  // but doesn't work reliably through every HTTPS proxy, and polling is
+  // simpler.)
+  logger.info(`Waiting for run to complete (polling every 10s; this can take many minutes)...`);
+  const completePollIntervalMs = 10_000;
+  let lastStatus: RunStatus = run.status;
+  let elapsed = 0;
+  while (true) {
+    await new Promise((r) => setTimeout(r, completePollIntervalMs));
+    elapsed += completePollIntervalMs;
+    const polled = await getRun(agent.id, run.id);
+    if (polled.status !== lastStatus) {
+      logger.info(`status -> ${polled.status}`);
+      lastStatus = polled.status;
+    } else if (elapsed % 60_000 === 0) {
+      logger.info(`still ${polled.status} (${Math.round(elapsed / 1000)}s elapsed)`);
+    }
+    if (polled.status === 'RUNNING') result.verifiedRunning = true;
+    if (
+      polled.status === 'FINISHED' ||
+      polled.status === 'ERROR' ||
+      polled.status === 'CANCELLED' ||
+      polled.status === 'EXPIRED'
+    ) {
+      break;
     }
   }
 
-  const finalState = await run.wait();
-  result.finalStatus = finalState.status;
-  if (finalState.result) result.resultText = finalState.result;
-  const branch = finalState.git?.branches?.[0];
-  if (branch?.branch) result.branch = branch.branch;
-  if (branch?.prUrl) result.prUrl = branch.prUrl;
+  const finalRun = await getRun(agent.id, run.id);
+  result.finalStatus = finalRun.status;
+  if (!result.resultText && finalRun.result) result.resultText = finalRun.result;
+  const finalBranch = finalRun.git?.branches?.[0];
+  if (!result.branch && finalBranch?.branch) result.branch = finalBranch.branch;
+  if (!result.prUrl && finalBranch?.prUrl) result.prUrl = finalBranch.prUrl;
 
-  logger.info(`Run finished with status: ${finalState.status}`);
-  if (finalState.durationMs !== undefined) {
-    logger.info(`Duration: ${(finalState.durationMs / 1000).toFixed(1)}s`);
+  logger.info(`Run finished with status: ${finalRun.status}`);
+  if (finalRun.durationMs !== undefined) {
+    logger.info(`Duration: ${(finalRun.durationMs / 1000).toFixed(1)}s`);
   }
   if (result.branch) logger.info(`Branch: ${result.branch}`);
   if (result.prUrl) logger.info(`PR: ${result.prUrl}`);
-
-  agent.close();
   return result;
 }
 
 /**
- * Subscribes to the run's event stream and resolves once we see a RUNNING
- * status. Rejects on terminal status (ERROR/CANCELLED/EXPIRED) or timeout.
+ * Polls GET /v1/agents/{id}/runs/{runId} until status reaches RUNNING.
+ * Throws on terminal status (ERROR/CANCELLED/EXPIRED) or timeout.
+ *
+ * We use polling rather than the SSE /stream endpoint because:
+ *  1. SSE through certain HTTPS proxies (including the Perplexity credential
+ *     proxy) buffers / breaks the stream framing.
+ *  2. For 'verify-started' we only care about a single state transition
+ *     (CREATING → RUNNING). One small fetch every few seconds is fine.
+ *  3. Removes a layer of streaming-protocol fragility (text/event-stream
+ *     parsing, undici timeouts, etc.).
  */
-async function verifyRunning(run: Run, logger: LaunchLogger, timeoutMs: number): Promise<void> {
-  return new Promise<void>((resolve, reject) => {
-    let resolved = false;
-    const timer = setTimeout(() => {
-      if (resolved) return;
-      resolved = true;
-      reject(
-        new Error(
-          `Cloud agent did not reach RUNNING within ${timeoutMs}ms. ` +
-            `Check ${run.id} in Cursor Web.`,
-        ),
-      );
-    }, timeoutMs);
+async function verifyRunning(
+  agentId: string,
+  runId: string,
+  initialStatus: RunStatus,
+  logger: LaunchLogger,
+  timeoutMs: number,
+): Promise<void> {
+  // Fast-path: if the initial create response already says RUNNING/FINISHED, we're done.
+  if (initialStatus === 'RUNNING' || initialStatus === 'FINISHED') {
+    if (initialStatus === 'FINISHED') {
+      logger.warn(`Run already FINISHED on create response — treating as verified.`);
+    }
+    return;
+  }
+  if (initialStatus === 'ERROR' || initialStatus === 'CANCELLED' || initialStatus === 'EXPIRED') {
+    throw new Error(`Run terminated before polling began. Status: ${initialStatus}`);
+  }
 
-    (async () => {
-      try {
-        for await (const event of run.stream()) {
-          if (event.type !== 'status') continue;
-          logger.info(`status -> ${event.status}${event.message ? ` (${event.message})` : ''}`);
-          if (event.status === 'RUNNING') {
-            if (resolved) return;
-            resolved = true;
-            clearTimeout(timer);
-            resolve();
-            return;
-          }
-          if (
-            event.status === 'ERROR' ||
-            event.status === 'CANCELLED' ||
-            event.status === 'EXPIRED'
-          ) {
-            if (resolved) return;
-            resolved = true;
-            clearTimeout(timer);
-            reject(
-              new Error(
-                `Cloud agent terminated before reaching RUNNING. ` +
-                  `Status: ${event.status}${event.message ? ` — ${event.message}` : ''}`,
-              ),
-            );
-            return;
-          }
-          if (event.status === 'FINISHED') {
-            // Extremely short run finished before we observed RUNNING.
-            if (resolved) return;
-            resolved = true;
-            clearTimeout(timer);
-            logger.warn(`Run finished before observing RUNNING — treating as verified.`);
-            resolve();
-            return;
-          }
-        }
-        if (!resolved) {
-          resolved = true;
-          clearTimeout(timer);
-          reject(new Error('Run stream ended without a RUNNING status'));
-        }
-      } catch (err) {
-        if (resolved) return;
-        resolved = true;
-        clearTimeout(timer);
-        reject(err instanceof Error ? err : new Error(String(err)));
-      }
-    })();
-  });
+  const pollIntervalMs = 4_000;
+  const startedAt = Date.now();
+  let lastStatus: RunStatus = initialStatus;
+  let pollCount = 0;
+
+  while (Date.now() - startedAt < timeoutMs) {
+    await new Promise((r) => setTimeout(r, pollIntervalMs));
+    pollCount += 1;
+    const polled = await getRun(agentId, runId);
+    if (polled.status !== lastStatus) {
+      logger.info(`status -> ${polled.status}`);
+      lastStatus = polled.status;
+    } else if (pollCount % 5 === 0) {
+      // Heartbeat every ~20s so the user sees we're alive
+      logger.info(`still ${polled.status} (${Math.round((Date.now() - startedAt) / 1000)}s elapsed)`);
+    }
+
+    if (polled.status === 'RUNNING') return;
+    if (polled.status === 'FINISHED') {
+      logger.warn(`Run finished before observing RUNNING — treating as verified.`);
+      return;
+    }
+    if (
+      polled.status === 'ERROR' ||
+      polled.status === 'CANCELLED' ||
+      polled.status === 'EXPIRED'
+    ) {
+      throw new Error(`Cloud agent terminated before reaching RUNNING. Status: ${polled.status}`);
+    }
+  }
+
+  throw new Error(
+    `Cloud agent did not reach RUNNING within ${Math.round(timeoutMs / 1000)}s. ` +
+      `Last status: ${lastStatus}. Check ${runId} in Cursor Web.`,
+  );
 }
+

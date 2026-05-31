@@ -4,34 +4,32 @@
  *
  * Common flows:
  *
- *   # Fresh launch from main with default model (latest Opus, thinking=high):
+ *   # Fresh launch from main with default model (latest Opus, thinking=true context=1m effort=max):
  *   nfx-cursor-launch --prompt-file ./next-prompt.md
  *
  *   # Fixup prompt on existing PR — auto pushes to that PR's branch:
  *   nfx-cursor-launch --prompt-file ./fixup.md --pr-url https://github.com/TSGCFO/nexfortis-content-pipeline/pull/42
  *
  *   # Override model + params:
- *   nfx-cursor-launch --prompt-file ./p.md --model claude-opus-4-7 --model-param thinking=high
+ *   nfx-cursor-launch --prompt-file ./p.md --model claude-opus-4-7 --model-param effort=high
  *
- *   # With session env vars (beta):
- *   nfx-cursor-launch --prompt-file ./p.md --env STAGING_TOKEN=abc --env DB_URL=xxx
- *
- *   # With inline MCP servers from a JSON file:
+ *   # Inline MCP servers from a JSON file:
  *   nfx-cursor-launch --prompt-file ./p.md --mcp ./mcp-servers.json
  *
  * Exit codes:
  *   0  — agent launched and verified RUNNING (or finished cleanly with --wait)
- *   1  — usage error (bad flags, missing prompt, missing API key, bad config)
+ *   1  — usage error (bad flags, missing prompt, etc.)
  *   2  — agent launched but failed to reach RUNNING (timeout or terminal error)
  *   3  — with --wait, run terminated with status `error` or `cancelled`
  */
 
 import { readFile } from 'node:fs/promises';
 
-import type { McpServerConfig } from '@cursor/sdk';
 import { Command, Option } from 'commander';
 
 import { launchCursorAgent } from './launch.js';
+
+import type { McpServerDef } from './types.js';
 
 interface CliOptions {
   promptFile?: string;
@@ -44,6 +42,7 @@ interface CliOptions {
   mcp?: string;
   name?: string;
   plan?: boolean;
+  noReview?: boolean;
 }
 
 async function readPrompt(opts: CliOptions): Promise<string> {
@@ -103,23 +102,29 @@ function parseEnvVars(pairs: string[]): Record<string, string> {
   return out;
 }
 
-async function loadMcpFile(path: string): Promise<Record<string, McpServerConfig>> {
+async function loadMcpFile(path: string): Promise<McpServerDef[]> {
   const text = await readFile(path, 'utf8');
   let parsed: unknown;
   try {
     parsed = JSON.parse(text);
   } catch (err) {
-    throw new Error(`--mcp file is not valid JSON (${path}): ${err instanceof Error ? err.message : err}`);
-  }
-  if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) {
-    const kind = Array.isArray(parsed) ? 'array' : parsed === null ? 'null' : typeof parsed;
     throw new Error(
-      `--mcp file must contain a JSON object mapping server-name -> config. Got: ${kind}`,
+      `--mcp file is not valid JSON (${path}): ${err instanceof Error ? err.message : err}`,
     );
   }
-  // Trust the shape; Cursor will validate it and surface a ConfigurationError
-  // if it's wrong. We deliberately don't reimplement Cursor's MCP schema here.
-  return parsed as Record<string, McpServerConfig>;
+  // Accept either an array (new shape) or an object map { name: config } (old shape).
+  if (Array.isArray(parsed)) {
+    return parsed as McpServerDef[];
+  }
+  if (typeof parsed === 'object' && parsed !== null) {
+    return Object.entries(parsed as Record<string, Omit<McpServerDef, 'name'>>).map(
+      ([name, cfg]) => ({ name, ...cfg }),
+    );
+  }
+  const kind = parsed === null ? 'null' : typeof parsed;
+  throw new Error(
+    `--mcp file must contain a JSON array of server defs or an object map. Got: ${kind}`,
+  );
 }
 
 async function main(): Promise<void> {
@@ -128,8 +133,7 @@ async function main(): Promise<void> {
     .name('nfx-cursor-launch')
     .description(
       'Launch a Cursor cloud agent on TSGCFO/nexfortis-content-pipeline. ' +
-        'Defaults to the latest Opus model from a hardcoded preference list, ' +
-        'starts from main, auto-creates a PR. ' +
+        'Defaults to the latest Opus model with thinking=true, context=1m, effort=max. ' +
         'Pass --pr-url to attach to an existing PR for fixup prompts.',
     )
     .option('--prompt-file <path>', 'read prompt text from a file')
@@ -144,7 +148,7 @@ async function main(): Promise<void> {
     )
     .option(
       '--model-param <id=value>',
-      'add a model parameter (e.g. thinking=high). Can be passed multiple times.',
+      'add a model parameter (e.g. effort=high). Can be passed multiple times.',
       (value: string, prev: string[]) => [...(prev ?? []), value],
       [] as string[],
     )
@@ -154,16 +158,19 @@ async function main(): Promise<void> {
     )
     .option(
       '--env <KEY=value>',
-      'inject a session-scoped env var into the cloud agent VM. Can be passed multiple times. (Beta feature in Cursor.)',
+      'inject a session-scoped env var into the cloud agent VM. Repeatable. (Beta feature in Cursor.)',
       (value: string, prev: string[]) => [...(prev ?? []), value],
       [] as string[],
     )
     .option(
       '--mcp <file>',
-      'path to a JSON file with inline MCP server definitions (object of name -> config).',
+      'path to a JSON file with inline MCP server definitions (array of {name,type,...}).',
     )
     .option('--name <text>', 'set the human-readable label that shows in Cursor Web.')
     .addOption(new Option('--plan', 'start the agent in plan mode (research before coding).'))
+    .addOption(
+      new Option('--no-review', 'skip requesting yourself as PR reviewer (skipReviewerRequest=true).'),
+    )
     .parse(process.argv);
 
   const opts = program.opts<CliOptions>();
@@ -178,7 +185,7 @@ async function main(): Promise<void> {
 
   let modelParams: Array<{ id: string; value: string }> | undefined;
   let envVars: Record<string, string> | undefined;
-  let mcpServers: Record<string, McpServerConfig> | undefined;
+  let mcpServers: McpServerDef[] | undefined;
   try {
     if (opts.modelParam && opts.modelParam.length > 0) {
       modelParams = parseKeyValuePairs(opts.modelParam, '--model-param');
@@ -206,14 +213,17 @@ async function main(): Promise<void> {
     if (mcpServers) launchOptions.mcpServers = mcpServers;
     if (opts.name) launchOptions.name = opts.name;
     if (opts.plan) launchOptions.conversationMode = 'plan';
+    // commander turns --no-review into opts.review = false (boolean) — we look
+    // at the underlying noReview field via opts because of TS typing.
+    if (opts.noReview === true) launchOptions.skipReviewerRequest = true;
 
     const result = await launchCursorAgent(launchOptions);
 
-    // Emit a final JSON line on stdout so callers (CI, scripts) can parse it.
+    // Final JSON line on stdout for callers to parse
     process.stdout.write(JSON.stringify(result, null, 2) + '\n');
 
     if (opts.wait) {
-      if (result.finalStatus === 'finished') process.exit(0);
+      if (result.finalStatus === 'FINISHED') process.exit(0);
       else process.exit(3);
     } else {
       if (result.verifiedRunning) process.exit(0);
@@ -223,7 +233,6 @@ async function main(): Promise<void> {
     const msg = err instanceof Error ? err.message : String(err);
     console.error(`Launch failed: ${msg}`);
     if (
-      msg.includes('Missing required env var') ||
       msg.includes('non-empty string') ||
       msg.includes('--env') ||
       msg.includes('--model-param') ||

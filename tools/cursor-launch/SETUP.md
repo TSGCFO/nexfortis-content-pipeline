@@ -31,28 +31,34 @@ If you want a webhook to fire on `statusChange` (ERROR / FINISHED), set a URL on
 
 ### 5. Generate an API key
 
-Go to [Integrations](https://cursor.com/dashboard/integrations) and create a Cursor API key. Save it somewhere safe — you'll either:
+Go to [Integrations](https://cursor.com/dashboard/integrations) and create a Cursor API key (only team admins can do this on a Team plan). Save it as a Computer custom credential with:
 
-- Export it as `CURSOR_API_KEY` in your shell before running the launcher, OR
-- Save it as a Computer custom credential and have me inject it (preferred — keeps it out of your shell history)
+- **Host:** `api.cursor.com`
+- **Type:** `bearer` (Cursor's API uses `Authorization: Bearer <key>`)
+
+Once saved, every future launcher run uses `api_credentials=['custom-cred:api.cursor.com']` and the key never enters env vars or chat history. Alternatively, export it as `CURSOR_API_KEY` for one-off local use.
 
 ## In the repo
 
 Already done — these are committed:
 
-- `tools/cursor-launch/` — the launcher
+- `tools/cursor-launch/` — the launcher (plain REST + polling, no `@cursor/sdk` dependency)
 - `docs/external/cursor-docs/` — 116-file snapshot of Cursor's docs
-- `pnpm.onlyBuiltDependencies` in root `package.json` — so `@cursor/sdk`'s native bindings build on `pnpm install`
+- `docs/external/cursor-models.json` — live `/v1/models` snapshot used to validate model IDs and variants
 
 ## Quick verification once everything is in place
 
+Using the credential proxy (no env var needed):
+
 ```bash
 # 1. Capture the authoritative model + params snapshot
-CURSOR_API_KEY=... pnpm --filter @ncp/cursor-launch start:list-models docs/external/cursor-models.json
+node tools/cursor-launch/dist/list-models.js docs/external/cursor-models.json
 
 # 2. Trivial test launch (with --wait so we see the full lifecycle)
 echo "Add a one-line comment to README.md explaining what this repo is about. Open a PR." \
-  | CURSOR_API_KEY=... pnpm --filter @ncp/cursor-launch exec nfx-cursor-launch --stdin --wait
+  | node tools/cursor-launch/dist/cli.js --stdin --wait
 ```
 
 If step 2 reaches `RUNNING` and eventually opens a PR, the launcher is wired up correctly.
+
+This project's smoke test (PR #40 closed without merge) validated the full path: model resolution → variant matching → agent create → RUNNING transition → cursor/* branch created → PR opened automatically. Took 111 seconds end-to-end.

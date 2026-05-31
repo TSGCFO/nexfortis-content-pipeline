@@ -1,41 +1,46 @@
 /**
  * Hardcoded defaults for the NexFortis content-pipeline Cursor launcher.
  *
- * Things that NEVER vary for this workflow are constants here.
- * Things that might vary per launch are CLI flags (see cli.ts), and the
- * defaults they fall back to also live here.
- *
- * Verified against docs in `docs/external/cursor-docs/` on 2026-05-28:
- *  - Model preference:  cursor.com_docs_models_claude-opus-4-{7,8}.md
- *  - Cloud agent shape: cursor.com_docs_sdk_typescript.md
- *  - Status lifecycle:  cursor.com_docs_sdk_typescript.md (SDKStatusMessage)
- *  - Model discovery:   cursor.com_docs_sdk_typescript.md (Cursor.models.list)
- *  - PR attach mode:    cursor.com_docs_cloud-agent_api_endpoints.md (repos[].prUrl)
+ * Verified against docs/external/cursor-docs/ (snapshot 2026-05-28) AND the
+ * live /v1/models response at docs/external/cursor-models.json (captured
+ * 2026-05-29).
  */
 
 export const CURSOR_LAUNCH_CONFIG = {
   /**
-   * Preference list for picking the model when `--model` is not passed.
-   * The launcher calls `Cursor.models.list()` once and picks the first ID
-   * from this array that exists in the response. When Anthropic ships a
-   * newer Opus, prepend its ID here.
+   * Preference order for picking the default model. The launcher calls
+   * `GET /v1/models` once and picks the first ID from this array that
+   * exists in the response. When Anthropic ships a newer Opus, prepend
+   * its ID here.
    *
-   * The launcher will also accept any other model ID via `--model`, so this
-   * is purely a "what should default mean" decision.
+   * Always overridable via `--model <id>`.
    */
   modelPreferenceOrder: ['claude-opus-4-8', 'claude-opus-4-7'] as const,
 
   /**
-   * Default model params applied when the resolved default model accepts a
-   * `thinking` parameter. We try `high` (best results per Cursor's own
-   * recommendation for Opus 4.7/4.8). If the model doesn't expose
-   * `thinking`, we drop the param silently rather than fail.
+   * Default per-model parameter PREFERENCES. The launcher applies these to
+   * a complete variant lookup: for the chosen model, it walks `variants[]`
+   * and picks the variant whose params best match these preferences.
    *
-   * Override with one or more `--model-param id=value` flags.
+   * IMPORTANT: Cursor's /v1/models exposes `parameters` (individual axes)
+   * AND `variants` (only valid combinations of those axes). You cannot
+   * send arbitrary param combos — only declared variants are accepted.
+   * That's why we treat these as preferences and snap to a real variant.
+   *
+   * The defaults below ask for the strongest setting you can normally use:
+   *   thinking=true, context=1m (largest), effort=max, fast=false.
+   * For Opus 4.7/4.8 today, that's a real variant. If a future model omits
+   * one of these axes entirely, the resolver still picks the closest match
+   * by other axes.
+   *
+   * Override per-launch with `--model-param id=value`.
    */
-  defaultModelParamsByCapability: [
-    { id: 'thinking', value: 'high' },
-  ] as Array<{ id: string; value: string }>,
+  defaultModelParamPreferences: [
+    { id: 'thinking', value: 'true' },
+    { id: 'context', value: '1m' },
+    { id: 'effort', value: 'max' },
+    { id: 'fast', value: 'false' },
+  ] as ReadonlyArray<{ id: string; value: string }>,
 
   /** Repo URL the cloud agent clones. Always the same for this pipeline. */
   repoUrl: 'https://github.com/TSGCFO/nexfortis-content-pipeline' as const,
@@ -48,7 +53,7 @@ export const CURSOR_LAUNCH_CONFIG = {
 
   /**
    * Verification: wait until cloud agent reaches RUNNING. Just getting an
-   * agent ID back from Agent.create is not proof that the VM provisioned.
+   * agent ID back from POST /v1/agents is not proof that the VM provisioned.
    */
   verifyTimeoutMs: 5 * 60 * 1000, // 5 minutes
 
