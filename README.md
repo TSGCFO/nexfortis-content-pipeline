@@ -56,3 +56,4 @@ The code, CI, and deployment for this repo are fully isolated from the main mono
 ## Next step
 
 Run [Prompt 1: Initial Scaffold](./docs/ways-of-work/plan/content-pipeline-v2/cursor-claude-prompt-library.md#prompt-1-initial-scaffold) in Cursor or Claude Code.
+<!-- launcher-smoke-test: this PR validates the tools/cursor-launch automation; safe to close without merging -->
