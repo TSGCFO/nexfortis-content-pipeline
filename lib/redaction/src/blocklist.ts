@@ -73,6 +73,9 @@ export const BLOCKLIST_EMAIL_HASHES: readonly string[] = Object.freeze([
   '20c50022758c8f07ac0e16d997d5d0492130bca87c33054eb6ef60d7964f0fbe',
   // Family member copied on case correspondence
   '85fe5b322551b5b16ef35bdb70253b3b3e597c6f694fff11a007fa40846a099f',
+  // Case-related testing vendor (office + examiner)
+  'f09f1b6804e799abd7524511c468a9131857bcfedd953a47ac28b7bf5ea11671',
+  'ed7c29a24fa09abb6f58929a729e166fd533509bf1d87fc6f349b5adcc027917',
 ]);
 
 /**

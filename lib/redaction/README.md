@@ -69,7 +69,8 @@ specific blocklist entry matched via timing side-channels.
 `BLOCKLIST_EMAIL_HASHES` contains real SHA-256 hex digests (populated
 2026-06-12) of the lower-cased, trimmed email addresses of all family-law
 case correspondents: own counsel (full firm), mediator's office, opposing
-counsel, opposing party, and a family member copied on case correspondence.
+counsel, opposing party, a family member copied on case correspondence,
+and a case-related testing vendor.
 Plaintext addresses are never stored in this repo.
 
 To add an entry, hash the lower-cased, trimmed address (this command strips
