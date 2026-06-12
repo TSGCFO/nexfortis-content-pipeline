@@ -47,7 +47,8 @@ export interface CheckBlocklistOptions {
  * address. Plaintext addresses are NEVER stored in this repo — the role
  * comments below are deliberately generic. To add an entry:
  *
- *   echo -n "address@example.com" | tr '[:upper:]' '[:lower:]' | sha256sum
+ *   printf %s "address@example.com" | tr -d '[:space:]' \
+ *     | tr '[:upper:]' '[:lower:]' | sha256sum | cut -d' ' -f1
  *
  * Populated 2026-06-12 from the real case correspondents, replacing the
  * original placeholders. Any change requires a PR and Hassan's review.

@@ -72,10 +72,13 @@ case correspondents: own counsel (full firm), mediator's office, opposing
 counsel, opposing party, and a family member copied on case correspondence.
 Plaintext addresses are never stored in this repo.
 
-To add an entry, hash the lower-cased, trimmed address:
+To add an entry, hash the lower-cased, trimmed address (this command strips
+all whitespace, lower-cases, and emits only the 64-char digest, matching
+`normalizeEmail()` + `sha256Hex()`):
 
 ```bash
-echo -n "address@example.com" | tr '[:upper:]' '[:lower:]' | sha256sum
+printf %s "address@example.com" | tr -d '[:space:]' \
+  | tr '[:upper:]' '[:lower:]' | sha256sum | cut -d' ' -f1
 ```
 
 Any change to the list requires a PR and Hassan's review.
