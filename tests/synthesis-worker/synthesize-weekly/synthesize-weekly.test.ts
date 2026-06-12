@@ -237,11 +237,11 @@ describe('runSynthesizeWeekly', () => {
         return '{"label":"Intune CA for iOS","topicKeywords":["intune","aad","ios"]}';
       }
       if (content.includes('OFF_PILLAR')) {
-        // Haiku classifier.
+        // Pillar classifier.
         return 'managed-it';
       }
       if (content.includes('Write ONE proposed title')) {
-        // Sonnet title generator.
+        // Title generator.
         return 'Configuring Conditional Access for iOS Authenticator';
       }
       return 'UNEXPECTED';

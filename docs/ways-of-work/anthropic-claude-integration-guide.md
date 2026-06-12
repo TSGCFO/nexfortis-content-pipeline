@@ -44,8 +44,11 @@ to update this guide and note the change in the PR description.
 > 400, and responses can carry `stop_reason: 'refusal'` (handle before reading content). The org
 > must have ≥30-day data retention — Fable 5 rejects requests from zero-data-retention orgs.
 
-We use three Claude models. The choice is locked per job and should not be changed in a single PR
-without a separate ADR-style note explaining why.
+**Historical per-job assignment (superseded 2026-06-12 by the note above).** The table below
+records the original three-model tiering and the per-job rationale. It is no longer what the code
+does — every call site defaults to `claude-fable-5` — but it remains the tier-down map: if Fable 5
+cost or latency ever warrants splitting models per stage again, restore the assignment below via
+the `ANTHROPIC_MODEL` env override (or per-stage `opts.model`), with an ADR-style note in the PR.
 
 | Job | Model | Effort | Rationale |
 |---|---|---|---|

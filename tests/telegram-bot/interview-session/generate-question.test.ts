@@ -257,9 +257,7 @@ describe('generateQuestion', () => {
     expect(create).toHaveBeenCalledTimes(1);
     const args = create.mock.calls[0]![0] as OpusMessagesCreateArgs;
 
-    // Model is exactly claude-fable-5 (env-overridable default)
     expect(args.model).toBe(QUESTION_MODEL);
-    expect(args.model).toBe('claude-fable-5');
 
     // Adaptive thinking, not enabled-with-budget
     expect(args.thinking).toEqual({ type: 'adaptive' });

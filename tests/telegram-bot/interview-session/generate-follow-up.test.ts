@@ -248,7 +248,6 @@ describe('generateFollowUp', () => {
     const args = create.mock.calls[0]![0] as OpusMessagesCreateArgs;
 
     expect(args.model).toBe(FOLLOW_UP_MODEL);
-    expect(args.model).toBe('claude-fable-5');
 
     expect(args.thinking).toEqual({ type: 'adaptive' });
 

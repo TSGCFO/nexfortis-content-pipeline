@@ -56,7 +56,7 @@ describe('labelCluster', () => {
     });
   });
 
-  it('returns the ERROR:INCOHERENT sentinel as-is when Sonnet refuses to label', async () => {
+  it('returns the ERROR:INCOHERENT sentinel as-is when the model refuses to label', async () => {
     const { client } = makeClient([
       `{"label":"${INCOHERENT_SENTINEL}","topicKeywords":[]}`,
     ]);
@@ -66,7 +66,7 @@ describe('labelCluster', () => {
     expect(result.topicKeywords).toEqual([]);
   });
 
-  it('throws when Sonnet returns malformed JSON', async () => {
+  it('throws when the model returns malformed JSON', async () => {
     const { client } = makeClient(['not json at all']);
     const cluster = makeCluster(['a', 'b', 'c']);
     await expect(labelCluster(cluster, client)).rejects.toThrow(/label-cluster/);

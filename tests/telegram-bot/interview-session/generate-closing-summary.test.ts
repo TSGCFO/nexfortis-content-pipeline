@@ -160,7 +160,6 @@ describe('generateClosingSummary', () => {
     const args = create.mock.calls[0]![0] as OpusMessagesCreateArgs;
 
     expect(args.model).toBe(CLOSING_SUMMARY_MODEL);
-    expect(args.model).toBe('claude-fable-5');
 
     // Fable 5's thinking is always on; the param is omitted entirely
     // (an explicit `{ type: 'disabled' }` would 400).
