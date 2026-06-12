@@ -64,16 +64,21 @@ failure), `redact()` returns
 The hash comparison uses `crypto.timingSafeEqual` to avoid leaking which
 specific blocklist entry matched via timing side-channels.
 
-## Placeholder hashes — manual edit required before any ingester ships
+## Blocklist hashes
 
-`BLOCKLIST_EMAIL_HASHES` currently contains placeholder strings
-(`__PLACEHOLDER_LEGAL_HASH_1__`, `__PLACEHOLDER_MEDIATOR_HASH_2__`). They
-are not valid 64-char hex digests, so the constant-time hash comparison will
-always reject any incoming email — fail-closed by design.
+`BLOCKLIST_EMAIL_HASHES` contains real SHA-256 hex digests (populated
+2026-06-12) of the lower-cased, trimmed email addresses of all family-law
+case correspondents: own counsel (full firm), mediator's office, opposing
+counsel, opposing party, and a family member copied on case correspondence.
+Plaintext addresses are never stored in this repo.
 
-Hassan must replace the placeholders with real SHA-256 hex digests of the
-lower-cased, trimmed email addresses via a separate manual edit before any
-ingester is enabled in production.
+To add an entry, hash the lower-cased, trimmed address:
+
+```bash
+echo -n "address@example.com" | tr '[:upper:]' '[:lower:]' | sha256sum
+```
+
+Any change to the list requires a PR and Hassan's review.
 
 ## Testing
 
