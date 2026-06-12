@@ -19,10 +19,8 @@ function makeClient(
     const r = responses[idx++];
     if (r === undefined) throw new Error('no more responses');
     if (r instanceof Error) throw r;
-    // The labeler prefills the assistant turn with '{', so the returned
-    // text should be the JSON body WITHOUT a leading '{' (the labeler
-    // prepends '{' itself). Send back the inner JSON without the leading
-    // brace.
+    // Structured outputs (output_config.format) return a complete JSON
+    // object in the text block — no prefill reconstruction involved.
     return { content: [{ type: 'text', text: r }] };
   });
   return {
@@ -48,7 +46,7 @@ function makeCluster(texts: string[]): Cluster {
 describe('labelCluster', () => {
   it('parses valid JSON and returns label + topicKeywords', async () => {
     const { client } = makeClient([
-      '"label":"Conditional Access for iOS","topicKeywords":["intune","aad","ios"]}',
+      '{"label":"Conditional Access for iOS","topicKeywords":["intune","aad","ios"]}',
     ]);
     const cluster = makeCluster(['error AADSTS50158', 'CA policy + iOS', 'Authenticator app']);
     const result = await labelCluster(cluster, client);
@@ -60,7 +58,7 @@ describe('labelCluster', () => {
 
   it('returns the ERROR:INCOHERENT sentinel as-is when Sonnet refuses to label', async () => {
     const { client } = makeClient([
-      `"label":"${INCOHERENT_SENTINEL}","topicKeywords":[]}`,
+      `{"label":"${INCOHERENT_SENTINEL}","topicKeywords":[]}`,
     ]);
     const cluster = makeCluster(['unrelated 1', 'unrelated 2', 'unrelated 3']);
     const result = await labelCluster(cluster, client);
@@ -76,7 +74,7 @@ describe('labelCluster', () => {
 
   it('caps concatenated input at TEXT_CONCAT_CAP characters', async () => {
     const { client, createSpy } = makeClient([
-      '"label":"Big topic","topicKeywords":["k1","k2","k3"]}',
+      '{"label":"Big topic","topicKeywords":["k1","k2","k3"]}',
     ]);
     // Three large blocks; total without cap = 12,001 chars. The labeler
     // joins on '\n---\n' between blocks, so total input is even larger
@@ -105,7 +103,7 @@ describe('labelCluster', () => {
   it('truncates labels longer than 80 chars', async () => {
     const longLabel = 'a'.repeat(150);
     const { client } = makeClient([
-      `"label":"${longLabel}","topicKeywords":["k1","k2","k3"]}`,
+      `{"label":"${longLabel}","topicKeywords":["k1","k2","k3"]}`,
     ]);
     const cluster = makeCluster(['t1', 't2', 't3']);
     const result = await labelCluster(cluster, client);

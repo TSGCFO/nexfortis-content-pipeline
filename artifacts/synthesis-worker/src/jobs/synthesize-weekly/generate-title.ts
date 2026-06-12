@@ -1,5 +1,5 @@
 /**
- * Claude Sonnet title generator for the top-scoring cluster.
+ * Claude title generator for the top-scoring cluster.
  *
  * Failure modes (per spec — never throws):
  *   - whitespace-only response → fall back to `cluster.label`
@@ -9,8 +9,19 @@
 
 import type { AnthropicLike, ClassifiedCluster } from './types.js';
 
-export const SONNET_DEFAULT_MODEL = 'claude-3-5-sonnet-latest';
-export const SONNET_MAX_TOKENS = 128;
+/**
+ * `claude-3-5-sonnet-latest` (the original default) was retired by
+ * Anthropic on 2025-10-28 and 404s. Default is now Claude Fable 5 per
+ * Hassan's directive (2026-06-12); override via `ANTHROPIC_MODEL` or
+ * `opts.model`.
+ */
+export const TITLE_DEFAULT_MODEL =
+  process.env['ANTHROPIC_MODEL']?.trim() || 'claude-fable-5';
+/**
+ * The visible answer is ≤80 chars, but Fable 5's always-on thinking bills
+ * into `max_tokens` — the old budget of 128 would truncate mid-thought.
+ */
+export const TITLE_MAX_TOKENS = 1024;
 export const TITLE_MAX_CHARS = 80;
 
 export interface GenerateTitleOptions {
@@ -43,17 +54,24 @@ export async function generateTitle(
   client: AnthropicLike,
   opts: GenerateTitleOptions = {},
 ): Promise<string> {
-  const model = opts.model ?? SONNET_DEFAULT_MODEL;
+  const model = opts.model ?? TITLE_DEFAULT_MODEL;
   const fallback = truncate(cluster.label);
 
   try {
     const response = await client.messages.create({
       model,
-      max_tokens: SONNET_MAX_TOKENS,
+      max_tokens: TITLE_MAX_TOKENS,
+      // One-line title — cap thinking spend on Fable 5.
+      output_config: { effort: 'low' },
       messages: [{ role: 'user', content: buildPrompt(cluster) }],
     });
-    const block = response.content?.[0];
-    if (!block || block.type !== 'text' || typeof block.text !== 'string') {
+    // A Fable 5 safety-classifier refusal returns empty/partial content;
+    // fall back to the cluster label like every other failure mode here.
+    if (response.stop_reason === 'refusal') {
+      return fallback;
+    }
+    const block = response.content?.find((b) => b.type === 'text');
+    if (!block || typeof block.text !== 'string') {
       return fallback;
     }
     // Strip wrapping quotes the model sometimes adds despite the instructions.

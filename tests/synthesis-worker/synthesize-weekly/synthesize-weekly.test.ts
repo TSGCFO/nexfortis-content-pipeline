@@ -233,8 +233,8 @@ describe('runSynthesizeWeekly', () => {
     const { client, calls } = makeAnthropic((_model, content) => {
       // Use prompt content to dispatch.
       if (content.includes('Output JSON only')) {
-        // Sonnet labeler (assistant turn was prefilled with '{').
-        return '"label":"Intune CA for iOS","topicKeywords":["intune","aad","ios"]}';
+        // Cluster labeler (structured outputs — complete JSON object).
+        return '{"label":"Intune CA for iOS","topicKeywords":["intune","aad","ios"]}';
       }
       if (content.includes('OFF_PILLAR')) {
         // Haiku classifier.
@@ -334,7 +334,7 @@ describe('runSynthesizeWeekly', () => {
 
     const { client } = makeAnthropic((_model, content) => {
       if (content.includes('Output JSON only')) {
-        return '"label":"Some off-pillar topic","topicKeywords":["k1","k2","k3"]}';
+        return '{"label":"Some off-pillar topic","topicKeywords":["k1","k2","k3"]}';
       }
       if (content.includes('OFF_PILLAR')) {
         return 'OFF_PILLAR';
@@ -383,9 +383,9 @@ describe('runSynthesizeWeekly', () => {
         labelCallIndex += 1;
         // First cluster is labeled coherently; second returns the incoherent sentinel.
         if (labelCallIndex === 1) {
-          return '"label":"Valid topic","topicKeywords":["kw1","kw2","kw3"]}';
+          return '{"label":"Valid topic","topicKeywords":["kw1","kw2","kw3"]}';
         }
-        return '"label":"ERROR:INCOHERENT","topicKeywords":[]}';
+        return '{"label":"ERROR:INCOHERENT","topicKeywords":[]}';
       }
       if (content.includes('OFF_PILLAR')) {
         return 'quickbooks';
@@ -427,7 +427,7 @@ describe('runSynthesizeWeekly', () => {
 
     const { client } = makeAnthropic((_model, content) => {
       if (content.includes('Output JSON only')) {
-        return '"label":"Good topic","topicKeywords":["k1","k2","k3"]}';
+        return '{"label":"Good topic","topicKeywords":["k1","k2","k3"]}';
       }
       if (content.includes('OFF_PILLAR')) return 'cybersecurity';
       if (content.includes('Write ONE proposed title')) return 'Title';
