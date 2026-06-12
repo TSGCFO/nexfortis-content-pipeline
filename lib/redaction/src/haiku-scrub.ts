@@ -5,8 +5,22 @@ import type { RedactionLogEntry } from './types.js';
 
 const logger = createLogger({ source: 'redaction' });
 
-const HAIKU_DEFAULT_MODEL = 'claude-3-5-haiku-latest';
-const HAIKU_MAX_TOKENS = 4096;
+/**
+ * Default scrub model. `claude-3-5-haiku-latest` (the original default) was
+ * retired by Anthropic on 2026-02-19 and now 404s, which made every scrub
+ * fail and — because redaction is fail-closed — silently blocked all email
+ * ingestion. Default is now Claude Fable 5 per Hassan's directive
+ * (2026-06-12); override via `ANTHROPIC_MODEL` or `opts.model`.
+ */
+const SCRUB_DEFAULT_MODEL =
+  process.env['ANTHROPIC_MODEL']?.trim() || 'claude-fable-5';
+
+/**
+ * Claude Fable 5's thinking is always on and its (invisible) thinking
+ * tokens bill into `max_tokens`, so the budget needs headroom beyond the
+ * redacted text + entity list themselves.
+ */
+const SCRUB_MAX_TOKENS = 8192;
 
 type HaikuEntityType = 'person' | 'company' | 'address';
 
@@ -27,6 +41,66 @@ const ENTITY_TOKEN: Record<HaikuEntityType, string> = {
   company: '[REDACTED_COMPANY]',
   address: '[REDACTED_ADDRESS]',
 };
+
+/**
+ * Structural slice of the Anthropic client wide enough to carry
+ * `output_config` (structured outputs) and read `stop_reason`.
+ * `@anthropic-ai/sdk@^0.28.0` does not type either at the TypeScript
+ * level, but the wire-level API accepts/returns them — the SDK forwards
+ * unknown keys to the HTTP layer. Same pattern as
+ * `artifacts/telegram-bot/.../anthropic-shapes.ts`; the cast below is the
+ * single permitted cast site in this module.
+ */
+interface ScrubMessagesCreateArgs {
+  model: string;
+  max_tokens: number;
+  system: string;
+  output_config: {
+    format: { type: 'json_schema'; schema: unknown };
+  };
+  messages: Array<{ role: 'user'; content: string }>;
+}
+
+interface ScrubMessagesResponse {
+  stop_reason?: string | null;
+  content: Array<{ type: string; text?: string }>;
+}
+
+interface ScrubAnthropicLike {
+  messages: {
+    create(args: ScrubMessagesCreateArgs): Promise<ScrubMessagesResponse>;
+  };
+}
+
+/**
+ * Grammar-enforced response schema. Mirrors `HaikuJsonResponse` exactly.
+ * Replaces the assistant-turn `'{'` prefill the original implementation
+ * used — last-assistant-turn prefills return a 400 on Claude Fable 5 and
+ * the whole 4.6+ family, and structured outputs are the documented
+ * replacement.
+ */
+const SCRUB_JSON_SCHEMA = {
+  type: 'object',
+  additionalProperties: false,
+  required: ['redacted', 'entities'],
+  properties: {
+    redacted: { type: 'string' },
+    entities: {
+      type: 'array',
+      items: {
+        type: 'object',
+        additionalProperties: false,
+        required: ['type', 'offset', 'length', 'replacement'],
+        properties: {
+          type: { type: 'string', enum: ['person', 'company', 'address'] },
+          offset: { type: 'integer' },
+          length: { type: 'integer' },
+          replacement: { type: 'string' },
+        },
+      },
+    },
+  },
+} as const;
 
 const SYSTEM_PROMPT = [
   'You are a privacy-preserving redaction assistant.',
@@ -76,9 +150,11 @@ export interface HaikuScrubResult {
 }
 
 /**
- * Pass 2 of the redaction pipeline. Uses Claude Haiku to identify and replace
- * named entities (person names, company names, street addresses) the regex
- * pass cannot catch. Throws on any non-recoverable error — the caller
+ * Pass 2 of the redaction pipeline. Uses Claude (default: Fable 5) to
+ * identify and replace named entities (person names, company names, street
+ * addresses) the regex pass cannot catch. The function name is historical —
+ * it originally ran on Claude 3.5 Haiku — and is kept to avoid churning
+ * `redact()` and its tests. Throws on any non-recoverable error — the caller
  * (`redact()`) is responsible for translating the throw into a
  * `{ status: 'blocked', reason: 'redaction_failed' }` result. There is no
  * retry logic here; callers retry at the ingester level.
@@ -90,35 +166,33 @@ export async function haikuScrub(
   if (!opts.anthropicApiKey) {
     throw new Error('haiku_scrub: anthropicApiKey is required');
   }
-  const model = opts.model ?? HAIKU_DEFAULT_MODEL;
-  const client = new Anthropic({ apiKey: opts.anthropicApiKey });
+  const model = opts.model ?? SCRUB_DEFAULT_MODEL;
+  const client = new Anthropic({
+    apiKey: opts.anthropicApiKey,
+  }) as unknown as ScrubAnthropicLike;
 
   let raw: string;
   try {
-    // Assistant-turn prefill: starting the assistant message with '{' forces
-    // Claude to continue from there and emit a JSON object as its first token,
-    // dramatically reducing the chance of conversational preamble or markdown
-    // fences sneaking into the response. The leading '{' is NOT included in
-    // the returned text, so we prepend it back when reconstructing the raw
-    // payload below.
     const response = await client.messages.create({
       model,
-      max_tokens: HAIKU_MAX_TOKENS,
+      max_tokens: SCRUB_MAX_TOKENS,
       system: SYSTEM_PROMPT,
-      messages: [
-        { role: 'user', content: buildUserPrompt(text) },
-        { role: 'assistant', content: '{' },
-      ],
+      output_config: {
+        format: { type: 'json_schema', schema: SCRUB_JSON_SCHEMA },
+      },
+      messages: [{ role: 'user', content: buildUserPrompt(text) }],
     });
-    const block = response.content?.[0];
-    if (!block || block.type !== 'text') {
+    // Fable 5's safety classifiers can decline a request (HTTP 200 with
+    // stop_reason 'refusal' and empty/partial content). Treat it like any
+    // other scrub failure: throw, so redact() fails closed.
+    if (response.stop_reason === 'refusal') {
+      throw new Error('haiku_scrub: model refused (safety classifier)');
+    }
+    const block = response.content?.find((b) => b.type === 'text');
+    if (!block || typeof block.text !== 'string') {
       throw new Error('haiku_scrub: unexpected response shape (no text block)');
     }
-    // Re-attach the prefilled '{' so downstream parsers receive a complete
-    // JSON object. The model occasionally emits its own '{' anyway, so we
-    // only prepend when the response text does not already start with one.
-    const responseText = block.text;
-    raw = responseText.trimStart().startsWith('{') ? responseText : `{${responseText}`;
+    raw = block.text;
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     logger.error(

@@ -2,10 +2,35 @@
 
 **Document Owner:** Hassan Sadiq, NexFortis  
 **Parent Epic:** [NexFortis Automated Content Pipeline v2](./epic-prd.md)  
-**Status:** Production Spec — Ready for Implementation  
-**Version:** 1.0  
+**Status:** Production Spec — implementation in progress (see Implementation Status below)  
+**Version:** 1.1  
 **Created:** May 10, 2026  
+**Updated:** June 12, 2026  
 **Audience:** Hassan Sadiq, Cursor agents + Claude Code (prompt recipients), Computer (prompt author)
+
+---
+
+## Implementation Status (as of 2026-06-12)
+
+This roadmap was written before implementation began; the repo has since moved well past Prompt 1.
+Shipped and tested (~80 test files, CI green through PR #38):
+
+| Layer | State |
+|---|---|
+| Shared libs (`lib/db`, `lib/embeddings`, `lib/redaction`, `lib/logger`, `lib/shared-types`) | **Built** |
+| `artifacts/capture-worker` — Claude Cowork ingest + MS Graph email ingest | **Built** (Perplexity + Teams ingesters not started) |
+| `artifacts/synthesis-worker` — weekly clustering → candidate → Telegram preview | **Built** |
+| `artifacts/telegram-bot` — interview session orchestration (confirmation / follow-up / closing / reminders) | **Built** |
+| `tools/nfx-cowork-export` — laptop CLI | **Built** |
+| `artifacts/gate-worker` — Stage A/B/C quality gates | **Stub** (empty `inngestFunctions`) |
+| `artifacts/sanity-bridge` — Sanity push, approve webhook, ISR + Indexing API | **Stub** |
+| SEOwind drafting automation (F3) | **Not started — approach under re-evaluation.** SEOwind's docs confirm the "Your Insights and Instructions" brief field exists as the F3 PRD assumed, but there is still no API; the Playwright-vs-human-in-the-loop-vs-direct-LLM-drafting decision is pending Hassan's call. |
+| Social distribution, GEO tracking | Not started |
+
+Operational notes: all Anthropic call sites default to `claude-fable-5` as of 2026-06-12
+(`ANTHROPIC_MODEL` env override; earlier defaults referenced retired model ids that 404ed).
+Before live email capture: install real blocklist hashes in `lib/redaction/src/blocklist.ts`
+(placeholders match nothing, so the legal-counsel email-hash block is currently inert).
 
 ---
 

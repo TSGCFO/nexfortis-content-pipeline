@@ -1,9 +1,11 @@
 /**
- * Claude Opus 4.7 confirmation-question generator (PRD §6.4 + §7.1).
+ * Claude confirmation-question generator (PRD §6.4 + §7.1).
  *
- * Follows `docs/ways-of-work/anthropic-claude-integration-guide.md` to
- * the letter:
- *   - `model: 'claude-opus-4-7'`                           (guide §1)
+ * Follows `docs/ways-of-work/anthropic-claude-integration-guide.md`
+ * (authored for Opus 4.7; model since retargeted to Claude Fable 5 per
+ * Hassan's directive, 2026-06-12 — the guide's call-shape rules carry
+ * over unchanged):
+ *   - `model: 'claude-fable-5'` (default; env-overridable)  (guide §1)
  *   - `thinking: { type: 'adaptive' }`                     (guide §3, §4.1)
  *   - `output_config.effort: 'xhigh'`                      (guide §3, §4.3)
  *   - `output_config.format`: JSON schema for structured  (guide §5)
@@ -18,9 +20,9 @@
  *   - no assistant prefilling
  *   - no top-level `effort:` (always inside `output_config`)
  *   - no legacy beta headers (the SDK doesn't accept them on `create()`)
- *   - we leave the thinking display `omitted` (default on Opus 4.7) since
- *     we don't need to inspect thinking content for confirmation-question
- *     generation
+ *   - we leave the thinking display `omitted` (the default on Fable 5,
+ *     as it was on Opus 4.7) since we don't need to inspect thinking
+ *     content for confirmation-question generation
  *
  * Never throws — returns a discriminated `QuestionGenerationResult` so the
  * orchestrator can record `signal_exclusions` and continue the loop.
@@ -40,18 +42,20 @@ import type { QuestionGenerationResult, QuestionResponse } from './types.js';
 const SOURCE = 'telegram_bot' as const;
 
 /**
- * Anthropic model id for confirmation-question generation. Per the
- * integration guide §1, this is locked to Opus 4.7 — changing it in a
- * single PR is forbidden without an ADR update.
+ * Anthropic model id for confirmation-question generation. The guide
+ * originally locked this to Opus 4.7; retargeted to Claude Fable 5 on
+ * Hassan's explicit directive (2026-06-12). Override via
+ * `ANTHROPIC_MODEL` to tier down without a code change.
  */
-export const OPUS_MODEL = 'claude-opus-4-7';
+export const QUESTION_MODEL =
+  process.env['ANTHROPIC_MODEL']?.trim() || 'claude-fable-5';
 
 /**
- * `max_tokens` budget for one question. 1024 is comfortable headroom for
- * an ≤80-word question plus the structured-output schema overhead and the
- * adaptive thinking trace.
+ * `max_tokens` budget for one question. Fable 5's thinking is always on
+ * and bills into `max_tokens`, so the budget carries headroom well beyond
+ * the ≤80-word question + structured-output overhead.
  */
-export const MAX_TOKENS = 1024;
+export const MAX_TOKENS = 4096;
 
 /**
  * System prompt — kept constant across the entire confirmation loop so
@@ -360,7 +364,7 @@ export async function generateQuestion(
   let response;
   try {
     response = await input.anthropic.messages.create({
-      model: OPUS_MODEL,
+      model: QUESTION_MODEL,
       max_tokens: MAX_TOKENS,
       thinking: { type: 'adaptive' },
       output_config: {
@@ -407,7 +411,7 @@ export async function generateQuestion(
           signalId: input.signal.id,
           stop_reason: stop,
         },
-        'opus output truncated; treating as api_error',
+        'model output truncated; treating as api_error',
       );
       return { ok: false, reason: 'api_error', detail: 'truncated' };
     case 'refusal': {
@@ -419,7 +423,7 @@ export async function generateQuestion(
           signalId: input.signal.id,
           refusal: message,
         },
-        'opus refused; treating as api_error',
+        'model refused; treating as api_error',
       );
       return {
         ok: false,
@@ -436,7 +440,7 @@ export async function generateQuestion(
           signalId: input.signal.id,
           stop_reason: stop,
         },
-        'opus returned unexpected stop_reason; treating as api_error',
+        'model returned unexpected stop_reason; treating as api_error',
       );
       return { ok: false, reason: 'api_error', detail };
     }
@@ -450,7 +454,7 @@ export async function generateQuestion(
         action: 'generate_question_no_text_block',
         signalId: input.signal.id,
       },
-      'opus returned no text block; treating as api_error',
+      'model returned no text block; treating as api_error',
     );
     return {
       ok: false,
@@ -468,7 +472,7 @@ export async function generateQuestion(
         signalId: input.signal.id,
         rawLength: textBlock.text.length,
       },
-      'opus response did not match QuestionResponse shape; treating as api_error',
+      'model response did not match QuestionResponse shape; treating as api_error',
     );
     return {
       ok: false,

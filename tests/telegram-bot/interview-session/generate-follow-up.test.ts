@@ -14,7 +14,7 @@
 import { describe, expect, it, vi } from 'vitest';
 
 import {
-  FOLLOW_UP_OPUS_MODEL,
+  FOLLOW_UP_MODEL,
   generateFollowUp,
 } from '../../../artifacts/telegram-bot/src/jobs/interview-session/generate-follow-up.js';
 import type {
@@ -247,8 +247,7 @@ describe('generateFollowUp', () => {
     expect(create).toHaveBeenCalledTimes(1);
     const args = create.mock.calls[0]![0] as OpusMessagesCreateArgs;
 
-    expect(args.model).toBe(FOLLOW_UP_OPUS_MODEL);
-    expect(args.model).toBe('claude-opus-4-7');
+    expect(args.model).toBe(FOLLOW_UP_MODEL);
 
     expect(args.thinking).toEqual({ type: 'adaptive' });
 

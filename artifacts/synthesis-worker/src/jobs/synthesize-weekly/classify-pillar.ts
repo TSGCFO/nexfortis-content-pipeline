@@ -1,5 +1,5 @@
 /**
- * Claude Haiku pillar classifier.
+ * Claude pillar classifier.
  *
  * Maps a labeled cluster onto one of three pillars
  * (`quickbooks`, `managed-it`, `cybersecurity`) or returns `null` for
@@ -16,8 +16,18 @@ import type { Pillar } from '@ncp/shared-types';
 
 import type { AnthropicLike } from './types.js';
 
-export const HAIKU_DEFAULT_MODEL = 'claude-3-5-haiku-latest';
-export const HAIKU_MAX_TOKENS = 32;
+/**
+ * `claude-3-5-haiku-latest` (the original default) was retired by Anthropic
+ * on 2026-02-19 and 404s. Default is now Claude Fable 5 per Hassan's
+ * directive (2026-06-12); override via `ANTHROPIC_MODEL` or `opts.model`.
+ */
+export const CLASSIFY_DEFAULT_MODEL =
+  process.env['ANTHROPIC_MODEL']?.trim() || 'claude-fable-5';
+/**
+ * The visible answer is one word, but Fable 5's always-on thinking bills
+ * into `max_tokens` — the old budget of 32 would truncate mid-thought.
+ */
+export const CLASSIFY_MAX_TOKENS = 1024;
 export const RETRY_BACKOFF_MS = 5000;
 
 const VALID_PILLARS: ReadonlySet<Pillar> = new Set([
@@ -81,11 +91,16 @@ async function callOnce(
 ): Promise<string> {
   const response = await client.messages.create({
     model,
-    max_tokens: HAIKU_MAX_TOKENS,
+    max_tokens: CLASSIFY_MAX_TOKENS,
+    // Single-word classification — cap thinking spend on Fable 5.
+    output_config: { effort: 'low' },
     messages: [{ role: 'user', content: prompt }],
   });
-  const block = response.content?.[0];
-  if (!block || block.type !== 'text' || typeof block.text !== 'string') {
+  if (response.stop_reason === 'refusal') {
+    throw new Error('classify-pillar: model refused (safety classifier)');
+  }
+  const block = response.content?.find((b) => b.type === 'text');
+  if (!block || typeof block.text !== 'string') {
     throw new Error('classify-pillar: unexpected response shape (no text block)');
   }
   return block.text;
@@ -97,7 +112,7 @@ export async function classifyPillar(
   client: AnthropicLike,
   opts: ClassifyPillarOptions = {},
 ): Promise<ClassifyPillarResult> {
-  const model = opts.model ?? HAIKU_DEFAULT_MODEL;
+  const model = opts.model ?? CLASSIFY_DEFAULT_MODEL;
   const sleep = opts.sleepFn ?? defaultSleep;
   const prompt = buildPrompt(label, topicKeywords);
 

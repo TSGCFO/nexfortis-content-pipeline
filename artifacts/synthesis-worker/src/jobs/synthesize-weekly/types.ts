@@ -103,8 +103,20 @@ export interface AnthropicLike {
       model: string;
       max_tokens: number;
       system?: string;
+      /**
+       * Structured-outputs / effort surface. `@anthropic-ai/sdk@^0.28.0`
+       * does not type `output_config`, but the wire-level API accepts it
+       * (the SDK forwards unknown keys) — same pattern as
+       * `artifacts/telegram-bot/.../anthropic-shapes.ts`.
+       */
+      output_config?: {
+        effort?: 'low' | 'medium' | 'high' | 'xhigh' | 'max';
+        format?: { type: 'json_schema'; schema: unknown };
+      };
       messages: Array<{ role: 'user' | 'assistant'; content: string }>;
     }): Promise<{
+      /** Optional so existing test mocks without it remain assignable. */
+      stop_reason?: string | null;
       content: Array<{ type: string; text?: string }>;
     }>;
   };

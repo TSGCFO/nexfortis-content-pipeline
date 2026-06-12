@@ -15,7 +15,7 @@
 import { describe, expect, it, vi } from 'vitest';
 
 import {
-  HAIKU_MODEL,
+  CLOSING_SUMMARY_MODEL,
   generateClosingSummary,
 } from '../../../artifacts/telegram-bot/src/jobs/interview-session/generate-closing-summary.js';
 import { nextDraftDay } from '../../../artifacts/telegram-bot/src/jobs/interview-session/business-day.js';
@@ -149,7 +149,7 @@ describe('generateClosingSummary', () => {
     }
   });
 
-  it('call structure correct: model is claude-haiku-4-5-20251001 with cache_control on system, structured-output format, NO thinking, NO top-level effort, NO output_config.effort', async () => {
+  it('call structure correct: model is claude-fable-5 with cache_control on system, structured-output format, NO thinking field, NO top-level effort, output_config.effort low', async () => {
     const { anthropic, create } = makeAnthropic(async () => happyHaikuResponse());
     await generateClosingSummary({
       sessionState: SESSION_STATE,
@@ -159,16 +159,16 @@ describe('generateClosingSummary', () => {
     expect(create).toHaveBeenCalledTimes(1);
     const args = create.mock.calls[0]![0] as OpusMessagesCreateArgs;
 
-    expect(args.model).toBe(HAIKU_MODEL);
-    expect(args.model).toBe('claude-haiku-4-5-20251001');
+    expect(args.model).toBe(CLOSING_SUMMARY_MODEL);
 
-    // Haiku does NOT use adaptive thinking — field absent.
+    // Fable 5's thinking is always on; the param is omitted entirely
+    // (an explicit `{ type: 'disabled' }` would 400).
     expect(args.thinking).toBeUndefined();
 
     expect(args.output_config?.format?.type).toBe('json_schema');
     expect(args.output_config?.format?.schema).toBeDefined();
-    // Effort is Opus-only — absent for Haiku.
-    expect(args.output_config?.effort).toBeUndefined();
+    // Paraphrase task — thinking spend capped via effort low.
+    expect(args.output_config?.effort).toBe('low');
 
     expect(args.system?.[0]?.cache_control).toEqual({ type: 'ephemeral' });
   });

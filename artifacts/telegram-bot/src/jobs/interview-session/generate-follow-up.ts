@@ -1,10 +1,11 @@
 /**
- * Claude Opus 4.7 open-ended follow-up question generator (PRD §4.4 +
- * §7.1). Same shape as `generate-question.ts` — the integration guide
- * (`docs/ways-of-work/anthropic-claude-integration-guide.md`) requires
- * all five Opus 4.7 patterns:
+ * Claude open-ended follow-up question generator (PRD §4.4 + §7.1).
+ * Same shape as `generate-question.ts` — the integration guide
+ * (`docs/ways-of-work/anthropic-claude-integration-guide.md`, authored
+ * for Opus 4.7; model since retargeted to Claude Fable 5 per Hassan's
+ * directive, 2026-06-12) requires all five call-shape patterns:
  *
- *   - `model: 'claude-opus-4-7'`                            (guide §1)
+ *   - `model: 'claude-fable-5'` (default; env-overridable)   (guide §1)
  *   - `thinking: { type: 'adaptive' }`                      (guide §3, §4.1)
  *   - `output_config.effort: 'xhigh'`                       (guide §3, §4.3)
  *   - `output_config.format`: JSON schema for structured    (guide §5)
@@ -41,13 +42,18 @@ import type {
 
 const SOURCE = 'telegram_bot' as const;
 
-/** Anthropic model id — locked to Opus 4.7 per integration guide §1. */
-export const FOLLOW_UP_OPUS_MODEL = 'claude-opus-4-7';
+/**
+ * Anthropic model id — originally locked to Opus 4.7 per integration
+ * guide §1; retargeted to Claude Fable 5 on Hassan's explicit directive
+ * (2026-06-12). Override via `ANTHROPIC_MODEL`.
+ */
+export const FOLLOW_UP_MODEL =
+  process.env['ANTHROPIC_MODEL']?.trim() || 'claude-fable-5';
 
-/** `max_tokens` budget for one follow-up. 1024 is comfortable headroom
- *  for an ≤80-word question plus structured-output overhead plus the
- *  adaptive thinking trace. */
-export const FOLLOW_UP_MAX_TOKENS = 1024;
+/** `max_tokens` budget for one follow-up. Fable 5's always-on thinking
+ *  bills into `max_tokens`, so the budget carries headroom well beyond
+ *  the ≤80-word question + structured-output overhead. */
+export const FOLLOW_UP_MAX_TOKENS = 4096;
 
 /**
  * System prompt — engineered to match the patterns in PR #36's
@@ -263,7 +269,7 @@ export async function generateFollowUp(
   let response;
   try {
     response = await input.anthropic.messages.create({
-      model: FOLLOW_UP_OPUS_MODEL,
+      model: FOLLOW_UP_MODEL,
       max_tokens: FOLLOW_UP_MAX_TOKENS,
       thinking: { type: 'adaptive' },
       output_config: {
@@ -309,7 +315,7 @@ export async function generateFollowUp(
           gap: input.uncoveredGap,
           stop_reason: stop,
         },
-        'opus follow-up output truncated; treating as api_error',
+        'model follow-up output truncated; treating as api_error',
       );
       return { ok: false, reason: 'api_error', detail: 'truncated' };
     case 'refusal': {
@@ -321,7 +327,7 @@ export async function generateFollowUp(
           gap: input.uncoveredGap,
           refusal: message,
         },
-        'opus refused follow-up; treating as api_error',
+        'model refused follow-up; treating as api_error',
       );
       return {
         ok: false,
@@ -338,7 +344,7 @@ export async function generateFollowUp(
           gap: input.uncoveredGap,
           stop_reason: stop,
         },
-        'opus follow-up returned unexpected stop_reason; treating as api_error',
+        'model follow-up returned unexpected stop_reason; treating as api_error',
       );
       return { ok: false, reason: 'api_error', detail };
     }
@@ -352,7 +358,7 @@ export async function generateFollowUp(
         action: 'generate_follow_up_no_text_block',
         gap: input.uncoveredGap,
       },
-      'opus follow-up returned no text block; treating as api_error',
+      'model follow-up returned no text block; treating as api_error',
     );
     return {
       ok: false,
@@ -370,7 +376,7 @@ export async function generateFollowUp(
         gap: input.uncoveredGap,
         rawLength: textBlock.text.length,
       },
-      'opus follow-up did not match FollowUpQuestion shape; treating as api_error',
+      'model follow-up did not match FollowUpQuestion shape; treating as api_error',
     );
     return {
       ok: false,

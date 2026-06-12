@@ -31,8 +31,24 @@ to update this guide and note the change in the PR description.
 
 ## 1. Model assignment by job
 
-We use three Claude models. The choice is locked per job and should not be changed in a single PR
-without a separate ADR-style note explaining why.
+> **Update (2026-06-12, authorized by Hassan):** All production call sites now default to
+> **`claude-fable-5`**, overridable per deployment via the `ANTHROPIC_MODEL` env var. Two drivers:
+> (a) Hassan's explicit directive to standardize on Anthropic's latest 1M-context model, and
+> (b) an incident — the synthesis worker and `lib/redaction` were still calling
+> `claude-3-5-sonnet-latest` / `claude-3-5-haiku-latest`, which Anthropic retired (2025-10-28 and
+> 2026-02-19 respectively), so those calls 404ed in production while mocked tests stayed green.
+> The per-job table below is retained as the historical assignment and as the tier-down map if
+> Fable 5 costs ever warrant splitting models per stage again. Fable 5 notes vs. the Opus 4.7
+> rules in this guide: thinking is always on (omit the `thinking` param or send `{type:
+> 'adaptive'}`; an explicit `disabled` 400s), assistant prefills still 400, sampling params still
+> 400, and responses can carry `stop_reason: 'refusal'` (handle before reading content). The org
+> must have ≥30-day data retention — Fable 5 rejects requests from zero-data-retention orgs.
+
+**Historical per-job assignment (superseded 2026-06-12 by the note above).** The table below
+records the original three-model tiering and the per-job rationale. It is no longer what the code
+does — every call site defaults to `claude-fable-5` — but it remains the tier-down map: if Fable 5
+cost or latency ever warrants splitting models per stage again, restore the assignment below via
+the `ANTHROPIC_MODEL` env override (or per-stage `opts.model`), with an ADR-style note in the PR.
 
 | Job | Model | Effort | Rationale |
 |---|---|---|---|

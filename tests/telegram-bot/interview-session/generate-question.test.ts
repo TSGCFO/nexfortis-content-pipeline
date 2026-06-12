@@ -16,7 +16,7 @@
 import { describe, expect, it, vi } from 'vitest';
 
 import {
-  OPUS_MODEL,
+  QUESTION_MODEL,
   SYSTEM_PROMPT,
   buildPerSignalInstruction,
   generateQuestion,
@@ -257,9 +257,7 @@ describe('generateQuestion', () => {
     expect(create).toHaveBeenCalledTimes(1);
     const args = create.mock.calls[0]![0] as OpusMessagesCreateArgs;
 
-    // Model is exactly claude-opus-4-7
-    expect(args.model).toBe(OPUS_MODEL);
-    expect(args.model).toBe('claude-opus-4-7');
+    expect(args.model).toBe(QUESTION_MODEL);
 
     // Adaptive thinking, not enabled-with-budget
     expect(args.thinking).toEqual({ type: 'adaptive' });

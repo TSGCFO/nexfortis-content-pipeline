@@ -1,14 +1,16 @@
 /**
- * Local structural slice of the Anthropic SDK we use for Claude Opus 4.7
- * confirmation-question generation, plus the JSON schema literal and
+ * Local structural slice of the Anthropic SDK we use for Claude
+ * confirmation-question generation (originally Opus 4.7; models since
+ * retargeted to Claude Fable 5 — the `Opus*` type names are kept to avoid
+ * churning every import site), plus the JSON schema literal and
  * post-validation narrower for the structured-output response.
  *
  * Why a local structural type? `@anthropic-ai/sdk@^0.28.0` (the pinned
  * workspace version, shared with `lib/redaction`) does NOT type
- * `thinking`, `output_config`, `cache_control`, or the
- * `claude-opus-4-7` model literal at the TypeScript level. The wire-level
- * API accepts them — the SDK forwards unknown keys to the HTTP layer —
- * but our compile-time surface needs to declare the shape we're sending.
+ * `thinking`, `output_config`, or `cache_control` at the TypeScript
+ * level. The wire-level API accepts them — the SDK forwards unknown keys
+ * to the HTTP layer — but our compile-time surface needs to declare the
+ * shape we're sending.
  * `OpusAnthropicLike` is that declaration. At the runtime boundary
  * (`createInterviewSessionJob` factory) we cast a real `new Anthropic(...)`
  * instance to this interface with `as unknown as OpusAnthropicLike` —
@@ -31,7 +33,7 @@
 import type { ClosingSummary, FollowUpQuestion, QuestionResponse } from './types.js';
 
 // ─────────────────────────────────────────────────────────────────────────
-// Structural Opus 4.7 client interface (wider than @anthropic-ai/sdk@0.28
+// Structural client interface (wider than @anthropic-ai/sdk@0.28
 // surfaces, but matching the actual wire shape).
 // ─────────────────────────────────────────────────────────────────────────
 

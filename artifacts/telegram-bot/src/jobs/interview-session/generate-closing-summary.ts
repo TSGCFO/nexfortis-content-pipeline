@@ -1,26 +1,20 @@
 /**
- * Claude Haiku 4.5 closing-summary generator (PRD §7.1 + US-F2-10).
+ * Claude closing-summary generator (PRD §7.1 + US-F2-10).
  *
  * Pattern source: `docs/ways-of-work/anthropic-claude-integration-guide.md`
  * sections 1 (model assignment), 5 (structured outputs), 6 (prompt
- * caching), 7 (stop-reason handling).
- *
- * Per integration guide §1, Haiku 4.5 is the assigned model for the
- * closing-summary task — it's a simple paraphrase, no quality-critical
- * reasoning, cost-sensitive. Per Anthropic docs (verified May 2026,
- * https://docs.claude.com/en/docs/build-with-claude/structured-outputs),
- * `output_config.format = { type: 'json_schema', schema }` is GA on
- * Haiku 4.5 since 2026-01-29. No beta header needed.
+ * caching), 7 (stop-reason handling). The guide originally assigned
+ * Haiku 4.5 to this task; the model was retargeted to Claude Fable 5 on
+ * Hassan's explicit directive (2026-06-12).
  *
  * Differences from `generate-question.ts` / `generate-follow-up.ts`:
- *   - Model: `claude-haiku-4-5-20251001` (NOT Opus 4.7).
- *   - NO `thinking` field. Haiku 4.5 supports manual `budget_tokens`
- *     extended thinking but NOT adaptive thinking
- *     (https://docs.claude.com/en/docs/about-claude/models/overview).
- *     For a paraphrase task, no thinking is needed.
- *   - NO `effort` field inside `output_config`. Haiku 4.5 accepts a
- *     default effort level; explicit values like `xhigh` are Opus-only
- *     per the migration guide.
+ *   - NO `thinking` field. On Fable 5 thinking is always on and the
+ *     parameter is best omitted entirely (an explicit
+ *     `{ type: 'disabled' }` returns a 400). We don't need to inspect
+ *     thinking content for a paraphrase task.
+ *   - `output_config.effort: 'low'` (not `xhigh`) — a 1–2 sentence
+ *     paraphrase doesn't warrant deep thinking, and on Fable 5 the
+ *     (invisible) thinking tokens bill into `max_tokens`.
  *   - Schema is small: `{ summary_text: string }`.
  *   - `system` block uses `cache_control: { type: 'ephemeral' }` — same
  *     pattern as the Opus calls so a follow-up summary call for a
@@ -48,12 +42,17 @@ import type { ClosingSummaryResult } from './types.js';
 
 const SOURCE = 'telegram_bot' as const;
 
-/** Anthropic model id — Haiku 4.5 per integration guide §1. */
-export const HAIKU_MODEL = 'claude-haiku-4-5-20251001';
+/**
+ * Anthropic model id — originally Haiku 4.5 per integration guide §1;
+ * retargeted to Claude Fable 5 on Hassan's explicit directive
+ * (2026-06-12). Override via `ANTHROPIC_MODEL`.
+ */
+export const CLOSING_SUMMARY_MODEL =
+  process.env['ANTHROPIC_MODEL']?.trim() || 'claude-fable-5';
 
-/** `max_tokens` for one closing summary. 512 is comfortable headroom
- *  for a 1–2 sentence paraphrase plus the structured-output overhead. */
-export const CLOSING_SUMMARY_MAX_TOKENS = 512;
+/** `max_tokens` for one closing summary. The paraphrase itself is ≤300
+ *  chars, but Fable 5's always-on thinking bills into `max_tokens`. */
+export const CLOSING_SUMMARY_MAX_TOKENS = 2048;
 
 /**
  * Engineered system prompt — mirrors PR #36's `SYSTEM_PROMPT` style:
@@ -215,13 +214,13 @@ export async function generateClosingSummary(
   let response;
   try {
     response = await input.anthropic.messages.create({
-      model: HAIKU_MODEL,
+      model: CLOSING_SUMMARY_MODEL,
       max_tokens: CLOSING_SUMMARY_MAX_TOKENS,
-      // NB: no `thinking` field — Haiku 4.5 doesn't support adaptive
-      // thinking, and we don't need extended thinking for a paraphrase.
+      // NB: no `thinking` field — on Fable 5 thinking is always on; omit
+      // the param (an explicit `{ type: 'disabled' }` returns a 400).
       output_config: {
-        // NB: no `effort` field — that's an Opus-only knob (the
-        // migration guide §5 covers this).
+        // Cap thinking spend — this is a 1–2 sentence paraphrase.
+        effort: 'low',
         format: {
           type: 'json_schema',
           schema: CLOSING_SUMMARY_JSON_SCHEMA,
@@ -244,7 +243,7 @@ export async function generateClosingSummary(
         action: 'closing_summary_threw',
         reason: detail,
       },
-      'haiku messages.create threw — falling back to placeholder',
+      'model messages.create threw — falling back to placeholder',
     );
     return { ok: false, reason: 'api_error', detail, fallbackText };
   }
@@ -261,7 +260,7 @@ export async function generateClosingSummary(
           action: 'closing_summary_truncated',
           stop_reason: stop,
         },
-        'haiku output truncated; falling back to placeholder',
+        'model output truncated; falling back to placeholder',
       );
       return {
         ok: false,
@@ -277,7 +276,7 @@ export async function generateClosingSummary(
           action: 'closing_summary_refused',
           refusal: message,
         },
-        'haiku refused; falling back to placeholder',
+        'model refused; falling back to placeholder',
       );
       return {
         ok: false,
@@ -294,7 +293,7 @@ export async function generateClosingSummary(
           action: 'closing_summary_unexpected_stop',
           stop_reason: stop,
         },
-        'haiku returned unexpected stop_reason; falling back to placeholder',
+        'model returned unexpected stop_reason; falling back to placeholder',
       );
       return {
         ok: false,
@@ -312,7 +311,7 @@ export async function generateClosingSummary(
         source: SOURCE,
         action: 'closing_summary_no_text_block',
       },
-      'haiku returned no text block; falling back to placeholder',
+      'model returned no text block; falling back to placeholder',
     );
     return {
       ok: false,
@@ -330,7 +329,7 @@ export async function generateClosingSummary(
         action: 'closing_summary_schema_mismatch',
         rawLength: textBlock.text.length,
       },
-      'haiku response did not match ClosingSummary shape; falling back to placeholder',
+      'model response did not match ClosingSummary shape; falling back to placeholder',
     );
     return {
       ok: false,

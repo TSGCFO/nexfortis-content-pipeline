@@ -2,7 +2,20 @@
 
 Backend automation system that produces SEO-ranked blog content for [nexfortis.com](https://nexfortis.com) by continuously capturing Hassan's daily expertise (Claude chats, Perplexity threads, Microsoft 365 email, Teams call transcripts, voice notes) and turning it into draft articles with a journalist-mode interview bot, SEOwind drafting, and a multi-stage quality gate before final human approval in Sanity CMS.
 
-> **Status: Specification complete. Implementation not yet started.**
+> **Status (2026-06-12): Capture, synthesis, and interview layers built and tested. Drafting, quality-gate, and publishing layers not yet implemented.**
+>
+> Built (with full test coverage — ~80 test files):
+>
+> - **Shared libs** — `lib/db` (Drizzle schemas + migrations, pgvector), `lib/embeddings` (OpenAI wrapper + chunking), `lib/redaction` (fail-closed blocklist → regex → LLM scrub), `lib/logger`, `lib/shared-types`
+> - **`artifacts/capture-worker`** — Claude Cowork session ingest + MS Graph email ingest (checkpointed, idempotent)
+> - **`artifacts/synthesis-worker`** — weekly clustering → labeling → pillar classification → article candidate + Telegram preview
+> - **`artifacts/telegram-bot`** — grammY bot + full interview session orchestration (confirmation loop, follow-ups, closing summary, reminders)
+> - **`tools/nfx-cowork-export`** — laptop CLI that exports Cowork sessions for the ingester
+>
+> Stubbed / not started: **`artifacts/gate-worker`** (Stage A/B/C quality gates), **`artifacts/sanity-bridge`** (Sanity push, approve webhook, ISR + Indexing API), SEOwind drafting automation (under re-evaluation — see F3 PRD), Perplexity + Teams ingesters, social distribution, GEO tracking.
+>
+> Before production capture goes live: replace the placeholder blocklist hashes in `lib/redaction/src/blocklist.ts` (until then the legal-counsel email-hash block matches nothing) and set `ANTHROPIC_MODEL=claude-fable-5` in the deployment environment (all Anthropic call sites default to Claude Fable 5 as of 2026-06-12; earlier defaults referenced models Anthropic has retired).
+>
 > All planning docs live under [`docs/ways-of-work/plan/content-pipeline-v2/`](./docs/ways-of-work/plan/content-pipeline-v2/). Start with the [Epic PRD](./docs/ways-of-work/plan/content-pipeline-v2/epic-prd.md).
 
 ---
@@ -55,4 +68,4 @@ The code, CI, and deployment for this repo are fully isolated from the main mono
 
 ## Next step
 
-Run [Prompt 1: Initial Scaffold](./docs/ways-of-work/plan/content-pipeline-v2/cursor-claude-prompt-library.md#prompt-1-initial-scaffold) in Cursor or Claude Code.
+The scaffold, capture, synthesis, and interview prompts have shipped (see Status above). The critical path forward is: settle the drafting-layer decision (SEOwind vs direct LLM drafting — pending Hassan's review of the SEOwind research), then implement `gate-worker` Stage A and `sanity-bridge`. Prompts continue to be authored fresh by Hassan and Computer against the real repo state; the [Prompt Library](./docs/ways-of-work/plan/content-pipeline-v2/cursor-claude-prompt-library.md) remains the historical reference.
