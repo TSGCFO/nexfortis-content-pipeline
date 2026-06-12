@@ -43,15 +43,39 @@ export interface CheckBlocklistOptions {
 /**
  * Production family-law / legal-counsel email hash list.
  *
- * These are intentionally placeholder values. Hassan must replace them with
- * real SHA-256 hex digests of the lower-cased, trimmed email addresses via a
- * separate manual edit before any ingester ships. The placeholder strings are
- * not valid 64-char hex, so the constant-time hash comparison will always
- * reject them — fail-closed by accident is acceptable here, fail-open is not.
+ * Each entry is the SHA-256 hex digest of a lower-cased, trimmed email
+ * address. Plaintext addresses are NEVER stored in this repo — the role
+ * comments below are deliberately generic. To add an entry:
+ *
+ *   printf %s "address@example.com" | tr -d '[:space:]' \
+ *     | tr '[:upper:]' '[:lower:]' | sha256sum | cut -d' ' -f1
+ *
+ * Populated 2026-06-12 from the real case correspondents, replacing the
+ * original placeholders. Any change requires a PR and Hassan's review.
  */
 export const BLOCKLIST_EMAIL_HASHES: readonly string[] = Object.freeze([
-  '__PLACEHOLDER_LEGAL_HASH_1__',
-  '__PLACEHOLDER_MEDIATOR_HASH_2__',
+  // Own family-law counsel (firm: lead, associate, clerks, accounting, office)
+  '41aa7880739b091b4e8be5880bb6c1a8bf99ed613905f57869290a58a738b65d',
+  '778e016a9cab30778aafb3c821775eeb4fbe6bc1d7a1ca1334b1c18a41cbbc83',
+  '80acc69ec898b85163b7e0e3b8af359682437d497fc9a973df5624d49d247b78',
+  '04b72c62a007601262b307ea1470399cca49c598cba7f328ccbeeaa346244521',
+  '97664c8524b7ac6fe439b78f4dc1289412748110975b971d44af92e3f00dd7f5',
+  'c2d4fa12e8ece62e406d537cda429bc7c62e0476f56d14f9515895ac6370a5ef',
+  // Mediator's office + mediator
+  'f2ef8ce23f11fa153650d2d05a40bd937f90343879ca06d3aa0b07a9cf396abf',
+  '6ca7d6f8c93f5f7b21487c9ab5a9ae0eb4e5e420a58f1dd206f0cb35d7ada39e',
+  // Opposing counsel (lead + staff)
+  'e936e41c7ed606b7362abdb37f934305db9ecb316ca2f6485715b3e1de4e6b73',
+  '332bf78036f66de565ea8de1b692586c713cdc9f08d2891146b8d82f5c1cb831',
+  // Prior/other counsel
+  'e19e3c987a97620af9f7c141c0b48b36b6d1d1da14c9300b8a39f86f6f1e27f2',
+  // Opposing party
+  '20c50022758c8f07ac0e16d997d5d0492130bca87c33054eb6ef60d7964f0fbe',
+  // Family member copied on case correspondence
+  '85fe5b322551b5b16ef35bdb70253b3b3e597c6f694fff11a007fa40846a099f',
+  // Case-related testing vendor (office + examiner)
+  'f09f1b6804e799abd7524511c468a9131857bcfedd953a47ac28b7bf5ea11671',
+  'ed7c29a24fa09abb6f58929a729e166fd533509bf1d87fc6f349b5adcc027917',
 ]);
 
 /**
