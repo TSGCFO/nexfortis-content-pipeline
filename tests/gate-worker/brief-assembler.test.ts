@@ -64,6 +64,14 @@ describe('assembleBrief', () => {
     expect(withState.usState).toBe('NY');
   });
 
+  it('omits usState and correctionInstructions when blank/whitespace', () => {
+    const brief = assembleBrief(
+      makeInput({ usState: '   ', correctionInstructions: '' }),
+    );
+    expect('usState' in brief).toBe(false);
+    expect('correctionInstructions' in brief).toBe(false);
+  });
+
   it('carries correction instructions only on rewrite attempts', () => {
     expect('correctionInstructions' in assembleBrief(makeInput())).toBe(false);
     const rewrite = assembleBrief(

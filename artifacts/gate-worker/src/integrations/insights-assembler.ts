@@ -165,22 +165,36 @@ export function assembleInsightsText(
   const reserved = Math.max(0, bodyBudget - MARKER_RESERVE);
   const reservedFill = greedyFill(segments, reserved);
   let body = reservedFill.kept.join(SEGMENT_SEPARATOR);
-  let omitted = reservedFill.omitted;
+  let keptCount = reservedFill.kept.length;
+  let contentTruncated = false;
 
-  // Nothing fit but there is content: include a hard-truncated first segment so
-  // the brief is never empty.
+  // Nothing fit whole but there is content and room: include a hard-truncated
+  // first segment so the brief is never empty.
   const first = segments[0];
-  if (reservedFill.kept.length === 0 && first !== undefined && reserved > 0) {
+  if (keptCount === 0 && first !== undefined && reserved > 0) {
     body = truncateAtBoundary(first, reserved);
-    omitted = Math.max(1, segments.length - 1);
+    keptCount = 1;
+    contentTruncated = true;
   }
 
-  const noun = omitted === 1 ? 'segment' : 'segments';
-  const marker = `${SEGMENT_SEPARATOR}… [truncated: ${omitted} additional ${noun} omitted]`;
+  // omittedChunks counts whole segments dropped — not partial truncation of an
+  // included segment.
+  const omitted = segments.length - keptCount;
 
-  return {
-    text: prefix + body + marker + suffix,
-    truncated: true,
-    omittedChunks: omitted,
-  };
+  let marker = '';
+  if (omitted > 0) {
+    const noun = omitted === 1 ? 'segment' : 'segments';
+    marker = `${SEGMENT_SEPARATOR}… [truncated: ${omitted} additional ${noun} omitted]`;
+  } else if (contentTruncated) {
+    marker = `${SEGMENT_SEPARATOR}… [truncated to fit]`;
+  }
+
+  // Final safety net: in pathological cases (cap smaller than the marker), make
+  // sure the result never exceeds the cap.
+  let text = prefix + body + marker + suffix;
+  if (text.length > maxChars) {
+    text = text.slice(0, maxChars);
+  }
+
+  return { text, truncated: true, omittedChunks: omitted };
 }

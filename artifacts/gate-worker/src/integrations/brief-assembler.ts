@@ -63,6 +63,10 @@ export interface BriefAssemblyInput {
 export function assembleBrief(input: BriefAssemblyInput): SEOwindBriefPayload {
   const location = input.location?.trim();
   const language = input.language?.trim();
+  // Blank/whitespace-only optionals are treated as unset, consistent with the
+  // location/language fallback and the "omitted unless explicitly set" doc.
+  const usState = input.usState?.trim();
+  const correction = input.correctionInstructions?.trim();
 
   return {
     focusKeyword: input.primaryKeyword,
@@ -71,9 +75,9 @@ export function assembleBrief(input: BriefAssemblyInput): SEOwindBriefPayload {
     projectId: input.projectId,
     insightsText: input.insightsText,
     enableCompanyDetails: true,
-    ...(input.usState !== undefined ? { usState: input.usState } : {}),
-    ...(input.correctionInstructions !== undefined
-      ? { correctionInstructions: input.correctionInstructions }
+    ...(usState && usState.length > 0 ? { usState } : {}),
+    ...(correction && correction.length > 0
+      ? { correctionInstructions: correction }
       : {}),
   };
 }

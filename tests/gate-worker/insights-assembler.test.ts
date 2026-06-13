@@ -126,6 +126,36 @@ describe('assembleInsightsText', () => {
     expect(result.truncated).toBe(true);
   });
 
+  it('reports zero omitted and a fit marker when one segment is hard-truncated', () => {
+    const result = assembleInsightsText(
+      {
+        confirmedAnswers: ['Z'.repeat(300)],
+        followUpAnswers: [],
+        evidenceChunks: [],
+      },
+      150,
+    );
+    expect(result.truncated).toBe(true);
+    expect(result.omittedChunks).toBe(0);
+    expect(result.text).toMatch(/truncated to fit]$/);
+    expect(result.text.length).toBeLessThanOrEqual(150);
+  });
+
+  it('never exceeds the cap even when prefix/suffix dominate the budget', () => {
+    const result = assembleInsightsText(
+      {
+        confirmedAnswers: ['alpha', 'beta', 'gamma'],
+        followUpAnswers: [],
+        evidenceChunks: [],
+        correctionPrefix: 'P'.repeat(40),
+        toneInstruction: 'T'.repeat(40),
+      },
+      100,
+    );
+    expect(result.text.length).toBeLessThanOrEqual(100);
+    expect(result.truncated).toBe(true);
+  });
+
   it('prepends the correction prefix and appends the tone instruction', () => {
     const result = assembleInsightsText(
       makeInput({
