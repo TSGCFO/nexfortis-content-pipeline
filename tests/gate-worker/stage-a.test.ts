@@ -74,6 +74,12 @@ describe('runGateA — passing draft (AC-F3-06)', () => {
     expect(typeof result.evaluatedAt).toBe('string');
     expect(Number.isNaN(Date.parse(result.evaluatedAt))).toBe(false);
   });
+
+  it('uses the injected clock for evaluatedAt (deterministic)', () => {
+    const fixed = new Date('2026-06-13T00:00:00.000Z');
+    const result = runGateA(makeDraft(), makeContext(), fixed);
+    expect(result.evaluatedAt).toBe('2026-06-13T00:00:00.000Z');
+  });
 });
 
 // --- GA-01: corpus citations -----------------------------------------------
@@ -238,6 +244,14 @@ describe('GA-05 author byline', () => {
     );
     expect(result.passed).toBe(true);
   });
+
+  it('rejects a non-canonical case (strict equality per spec)', () => {
+    const result = runGateA(
+      makeDraft({ byline: 'hassan sadiq' }),
+      makeContext(),
+    );
+    expect(result.failures[0]?.ruleId).toBe('GA-05');
+  });
 });
 
 describe('GA-06 author bio block', () => {
@@ -295,6 +309,16 @@ describe('GA-07 unsourced statistic', () => {
     });
     const result = runGateA(draft, makeContext());
     expect(result.passed).toBe(true);
+  });
+
+  it('does not accept "resource" as a source (whole-word cue matching)', () => {
+    const draft = makeDraft({
+      draftText:
+        'When I migrated the tenant on the Authenticator app, our resource pool logged 4827 events for AADSTS50158. We moved on.',
+    });
+    const result = runGateA(draft, makeContext());
+    expect(result.passed).toBe(false);
+    expect(result.failures[0]?.ruleId).toBe('GA-07');
   });
 });
 

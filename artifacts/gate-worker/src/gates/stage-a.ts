@@ -172,7 +172,7 @@ export const FIRST_PERSON_PATTERNS: readonly RegExp[] = Object.freeze([
 export const ATTRIBUTION_CUES: readonly string[] = Object.freeze([
   'source',
   'according to',
-  'per ',
+  'per',
   'study',
   'survey',
   'report',
@@ -187,6 +187,12 @@ export const ATTRIBUTION_CUES: readonly string[] = Object.freeze([
 ]);
 
 const URL_REGEX = /(https?:\/\/|www\.)\S+/i;
+
+// Whole-word matchers for the attribution cues, so a statistic next to
+// "resource" or "outsourced" is not mistaken for a sourced one ("source").
+const ATTRIBUTION_CUE_REGEXES: readonly RegExp[] = ATTRIBUTION_CUES.map(
+  (cue) => new RegExp(`\\b${cue.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`, 'i'),
+);
 
 /**
  * GA-01: common long words that are NOT distinctive enough to count as a
@@ -373,7 +379,7 @@ function checkClickbaitTitle(draft: GateADraft): GateAFailure | null {
 
 function checkByline(draft: GateADraft): GateAFailure | null {
   const byline = draft.byline.trim();
-  if (byline.toLowerCase() === EXPECTED_BYLINE.toLowerCase()) return null;
+  if (byline === EXPECTED_BYLINE) return null;
   return {
     ruleId: 'GA-05',
     ruleName: 'Author Byline',
@@ -416,11 +422,10 @@ function checkUnsourcedStatistic(draft: GateADraft): GateAFailure | null {
       index + token.length + SOURCE_PROXIMITY_CHARS,
     );
     const window = text.slice(windowStart, windowEnd);
-    const windowLower = window.toLowerCase();
 
     const hasSource =
       URL_REGEX.test(window) ||
-      ATTRIBUTION_CUES.some((cue) => windowLower.includes(cue));
+      ATTRIBUTION_CUE_REGEXES.some((re) => re.test(window));
     if (hasSource) continue;
 
     return {
@@ -451,10 +456,16 @@ function checkEeatMarker(draft: GateADraft): GateAFailure | null {
  * Run Stage A. Rules are evaluated in GA-01 → GA-08 order and the first
  * failure short-circuits the rest (fail-fast). A passing result has an empty
  * `failures` array.
+ *
+ * The rule evaluation itself is pure and deterministic; the only non-pure
+ * value is the `evaluatedAt` timestamp, which is taken from the injectable
+ * `now` clock (defaulting to the current time) so callers and tests can pin
+ * it for deterministic / snapshot results.
  */
 export function runGateA(
   draft: GateADraft,
   context: GateAContext,
+  now: Date = new Date(),
 ): GateAResult {
   const evaluators: Array<() => GateAFailure | null> = [
     () => checkCorpusCitations(draft, context),
@@ -467,16 +478,13 @@ export function runGateA(
     () => checkEeatMarker(draft),
   ];
 
+  const evaluatedAt = now.toISOString();
   for (const evaluate of evaluators) {
     const failure = evaluate();
     if (failure) {
-      return {
-        passed: false,
-        failures: [failure],
-        evaluatedAt: new Date().toISOString(),
-      };
+      return { passed: false, failures: [failure], evaluatedAt };
     }
   }
 
-  return { passed: true, failures: [], evaluatedAt: new Date().toISOString() };
+  return { passed: true, failures: [], evaluatedAt };
 }
