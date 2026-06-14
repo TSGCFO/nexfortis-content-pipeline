@@ -717,15 +717,30 @@ describe('runInterviewSession', () => {
   it('dispatches interview.session.opened exactly once after the session insert', async () => {
     const { deps, sendInngestEvent } = makeDeps();
     await runInterviewSession(deps, 'cand-1');
-    expect(sendInngestEvent).toHaveBeenCalledTimes(1);
-    const payload = sendInngestEvent.mock.calls[0]![0] as {
-      name: string;
-      data: { chatId: string; sessionId: string; candidateId: string };
-    };
-    expect(payload.name).toBe('interview.session.opened');
-    expect(payload.data.chatId).toBe('CHAT');
-    expect(payload.data.sessionId).toBe('sess-1');
-    expect(payload.data.candidateId).toBe('cand-1');
+    const opened = sendInngestEvent.mock.calls
+      .map((c) => c[0] as { name: string; data: Record<string, unknown> })
+      .filter((p) => p.name === 'interview.session.opened');
+    expect(opened).toHaveLength(1);
+    expect(opened[0]!.data['chatId']).toBe('CHAT');
+    expect(opened[0]!.data['sessionId']).toBe('sess-1');
+    expect(opened[0]!.data['candidateId']).toBe('cand-1');
+  });
+
+  it('dispatches draft.requested on completion with confirmed signals + candidate fields', async () => {
+    const { deps, sendInngestEvent } = makeDeps();
+    const outcome = await runInterviewSession(deps, 'cand-1');
+    expect(outcome.kind).toBe('completed');
+    const draftCalls = sendInngestEvent.mock.calls
+      .map((c) => c[0] as { name: string; data: Record<string, unknown> })
+      .filter((p) => p.name === 'draft.requested');
+    expect(draftCalls).toHaveLength(1);
+    const draft = draftCalls[0]!;
+    expect(draft.data['candidateId']).toBe('cand-1');
+    expect(draft.data['sessionId']).toBe('sess-1');
+    expect(draft.data['pillar']).toBe('managed-it');
+    expect(draft.data['primaryKeyword']).toBe('intune');
+    // The fake DB surfaces no confirmable signals in this flow.
+    expect(draft.data['confirmedChunkIds']).toEqual([]);
   });
 
   it('does NOT dispatch interview.session.opened when candidate is missing (no session row to advertise)', async () => {
@@ -743,7 +758,9 @@ describe('runInterviewSession', () => {
     });
     const outcome = await runInterviewSession(deps, 'cand-1');
     expect(outcome.kind).toBe('completed');
-    expect(failingDispatch).toHaveBeenCalledTimes(1);
+    // Both dispatches (open-session early, draft.requested at completion) hit
+    // the failing mock; neither is allowed to crash the run.
+    expect(failingDispatch).toHaveBeenCalledTimes(2);
     // Warn logged with the right action.
     const warnCalls = logger.warn.mock.calls;
     const dispatchWarn = warnCalls.find(
@@ -752,6 +769,13 @@ describe('runInterviewSession', () => {
         'session_opened_dispatch_failed',
     );
     expect(dispatchWarn).toBeDefined();
+    // The draft.requested failure is surfaced at error level.
+    const draftError = logger.error.mock.calls.find(
+      (c) =>
+        (c[0] as Record<string, unknown>)['action'] ===
+        'draft_requested_dispatch_failed',
+    );
+    expect(draftError).toBeDefined();
     // Preview send still happened (fetchFn was called for preview + completion).
     expect(fetchFn).toHaveBeenCalled();
   });

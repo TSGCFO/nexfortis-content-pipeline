@@ -64,6 +64,7 @@ import {
   type Database,
 } from '@ncp/db';
 import { createLogger, type Logger } from '@ncp/logger';
+import type { Pillar } from '@ncp/shared-types';
 
 import Anthropic from '@anthropic-ai/sdk';
 
@@ -147,6 +148,18 @@ export function readEnv(): InterviewSessionEnv {
  * Dependencies for the DI core. The factory below maps these to Inngest's
  * step primitives; tests inject fakes.
  */
+/**
+ * Payload of the `draft.requested` event dispatched on interview completion
+ * and consumed by the gate-worker's draft-generator (F3 PRD §10.1).
+ */
+export interface DraftRequestedEventData {
+  candidateId: string;
+  sessionId: string;
+  confirmedChunkIds: string[];
+  pillar: Pillar;
+  primaryKeyword: string;
+}
+
 export interface RunInterviewSessionDeps {
   db: Database;
   logger: Logger;
@@ -164,16 +177,25 @@ export interface RunInterviewSessionDeps {
     timeoutMs: number,
   ) => Promise<IncomingReplyEvent | null>;
   /**
-   * Dispatches `interview.session.opened` so the bot process's in-memory
-   * `chatId → ActiveSession` map can include this newly-created session.
-   * Maps to `step.sendEvent('open-session', ...)` in the Inngest wiring.
-   * PR 2 backport — never throws on send failure; the loop logs and
-   * continues so a flaky Inngest dispatch doesn't orphan the session row.
+   * Dispatches pipeline events:
+   *  - `interview.session.opened` (PR 2 backport) so the bot process's
+   *    in-memory `chatId → ActiveSession` map can include this newly-created
+   *    session;
+   *  - `draft.requested` (F3) so the gate-worker assembles the SEOwind brief
+   *    once the interview completes.
+   * Maps to `step.sendEvent(...)` in the Inngest wiring (distinct, stable step
+   * ids per event). Both callers log and continue on send failure — Inngest's
+   * `step.sendEvent` already retries internally, so a surfaced failure is rare
+   * and must not re-run the whole (Monday-gated) interview.
    */
-  sendInngestEvent: (payload: {
-    name: 'interview.session.opened';
-    data: { chatId: string; sessionId: string; candidateId: string };
-  }) => Promise<void>;
+  sendInngestEvent: (
+    payload:
+      | {
+          name: 'interview.session.opened';
+          data: { chatId: string; sessionId: string; candidateId: string };
+        }
+      | { name: 'draft.requested'; data: DraftRequestedEventData },
+  ) => Promise<void>;
   /**
    * Claude Opus 4.7 client (structurally typed wider than @anthropic-ai/sdk
    * @0.28's surface to expose `thinking`, `output_config`, and
@@ -524,6 +546,37 @@ export async function runInterviewSession(
     .set({ status: 'interview_complete' })
     .where(eq(articleCandidates.id, candidateId));
 
+  // 10b-i. Kick off F3 drafting: dispatch `draft.requested` so the gate-worker
+  // assembles the SEOwind brief from the confirmed signals + answers. Fired
+  // unconditionally on completion (the fallback path confirms no signals but
+  // still produces a draftable answer). Logged-and-continue on failure for the
+  // same reason as `interview.session.opened`: `step.sendEvent` retries
+  // internally, and re-running the Monday-gated interview to recover a dispatch
+  // is worse than a logged miss.
+  try {
+    await deps.sendInngestEvent({
+      name: 'draft.requested',
+      data: {
+        candidateId,
+        sessionId,
+        confirmedChunkIds: confirmedSignals.map((s) => s.id),
+        pillar: candidate.pillar,
+        primaryKeyword: candidate.primaryKeyword,
+      },
+    });
+  } catch (err) {
+    deps.logger.error(
+      {
+        source: SOURCE,
+        action: 'draft_requested_dispatch_failed',
+        sessionId,
+        candidateId,
+        reason: err instanceof Error ? err.message : String(err),
+      },
+      'draft.requested dispatch failed; draft will not be generated until re-triggered',
+    );
+  }
+
   // 10c. Closing summary via Claude Haiku 4.5.
   const generateClosingSummaryFn =
     deps.generateClosingSummaryFn ?? generateClosingSummary;
@@ -749,7 +802,14 @@ export function createInterviewSessionJob(
             // step.run — same constraint as `waitForReply` below. The
             // body of `runInterviewSession` is intentionally not
             // wrapped in step.run, so a direct call here is correct.
-            await step.sendEvent('open-session', payload);
+            // Distinct, stable step ids per event so the two dispatches
+            // (open-session early, draft.requested at completion) never
+            // collide on Inngest's step memoization.
+            const stepId =
+              payload.name === 'draft.requested'
+                ? 'dispatch-draft-requested'
+                : 'open-session';
+            await step.sendEvent(stepId, payload);
           },
           // PR 3: scheduled reminder via durable step.sleep + step.run.
           //
