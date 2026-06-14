@@ -714,31 +714,33 @@ describe('runInterviewSession', () => {
 
   // ----- PR 2 backport tests ---------------------------------------------
 
-  it('dispatches interview.session.opened after the session insert', async () => {
+  it('dispatches interview.session.opened exactly once after the session insert', async () => {
     const { deps, sendInngestEvent } = makeDeps();
     await runInterviewSession(deps, 'cand-1');
     const opened = sendInngestEvent.mock.calls
       .map((c) => c[0] as { name: string; data: Record<string, unknown> })
-      .find((p) => p.name === 'interview.session.opened');
-    expect(opened).toBeDefined();
-    expect(opened!.data['chatId']).toBe('CHAT');
-    expect(opened!.data['sessionId']).toBe('sess-1');
-    expect(opened!.data['candidateId']).toBe('cand-1');
+      .filter((p) => p.name === 'interview.session.opened');
+    expect(opened).toHaveLength(1);
+    expect(opened[0]!.data['chatId']).toBe('CHAT');
+    expect(opened[0]!.data['sessionId']).toBe('sess-1');
+    expect(opened[0]!.data['candidateId']).toBe('cand-1');
   });
 
   it('dispatches draft.requested on completion with confirmed signals + candidate fields', async () => {
     const { deps, sendInngestEvent } = makeDeps();
     const outcome = await runInterviewSession(deps, 'cand-1');
     expect(outcome.kind).toBe('completed');
-    const draft = sendInngestEvent.mock.calls
+    const draftCalls = sendInngestEvent.mock.calls
       .map((c) => c[0] as { name: string; data: Record<string, unknown> })
-      .find((p) => p.name === 'draft.requested');
-    expect(draft).toBeDefined();
-    expect(draft!.data['candidateId']).toBe('cand-1');
-    expect(draft!.data['sessionId']).toBe('sess-1');
-    expect(draft!.data['pillar']).toBe('managed-it');
-    expect(draft!.data['primaryKeyword']).toBe('intune');
-    expect(Array.isArray(draft!.data['confirmedChunkIds'])).toBe(true);
+      .filter((p) => p.name === 'draft.requested');
+    expect(draftCalls).toHaveLength(1);
+    const draft = draftCalls[0]!;
+    expect(draft.data['candidateId']).toBe('cand-1');
+    expect(draft.data['sessionId']).toBe('sess-1');
+    expect(draft.data['pillar']).toBe('managed-it');
+    expect(draft.data['primaryKeyword']).toBe('intune');
+    // The fake DB surfaces no confirmable signals in this flow.
+    expect(draft.data['confirmedChunkIds']).toEqual([]);
   });
 
   it('does NOT dispatch interview.session.opened when candidate is missing (no session row to advertise)', async () => {
