@@ -26,3 +26,13 @@ export class InvalidDraftRequestedEventError extends Error {
     this.name = 'InvalidDraftRequestedEventError';
   }
 }
+
+export class InterviewSessionNotFoundError extends Error {
+  public readonly code = 'INTERVIEW_SESSION_NOT_FOUND' as const;
+  constructor(sessionId: string, candidateId: string) {
+    super(
+      `draft-generator: no interview_sessions row for session ${sessionId} belonging to candidate ${candidateId}`,
+    );
+    this.name = 'InterviewSessionNotFoundError';
+  }
+}

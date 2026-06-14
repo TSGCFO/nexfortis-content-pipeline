@@ -40,6 +40,7 @@ import {
 } from '../../integrations/insights-assembler.js';
 import {
   EnvNotConfiguredError,
+  InterviewSessionNotFoundError,
   InvalidDraftRequestedEventError,
 } from './errors.js';
 
@@ -181,15 +182,27 @@ export async function runDraftGenerator(
     return { kind: 'skipped_existing', draftId: existingId };
   }
 
-  // Load Hassan's interview answers.
+  // Load Hassan's interview answers. Filter by BOTH session id and candidate
+  // id so a mismatched payload can never assemble another candidate's answers,
+  // and fail fast if no such session exists.
   const sessionRows = await db
     .select({ answers: interviewSessions.answers })
     .from(interviewSessions)
-    .where(eq(interviewSessions.id, event.sessionId));
-  const answers = sessionRows[0]?.answers ?? [];
-  const confirmedAnswers = extractAnswerProse(answers);
+    .where(
+      and(
+        eq(interviewSessions.id, event.sessionId),
+        eq(interviewSessions.candidateId, event.candidateId),
+      ),
+    );
+  const sessionRow = sessionRows[0];
+  if (sessionRow === undefined) {
+    throw new InterviewSessionNotFoundError(event.sessionId, event.candidateId);
+  }
+  const confirmedAnswers = extractAnswerProse(sessionRow.answers ?? []);
 
-  // Load the confirmed corpus evidence chunks.
+  // Load the confirmed corpus evidence chunks. Re-apply the standard
+  // is_deleted filter so a signal soft-deleted after confirmation (or a stale
+  // payload) cannot re-introduce deleted corpus content into the brief.
   let evidenceChunks: EvidenceChunk[] = [];
   if (event.confirmedChunkIds.length > 0) {
     const chunkRows = await db
@@ -198,7 +211,12 @@ export async function runDraftGenerator(
         capturedAt: captureSignals.capturedAt,
       })
       .from(captureSignals)
-      .where(inArray(captureSignals.id, event.confirmedChunkIds));
+      .where(
+        and(
+          inArray(captureSignals.id, event.confirmedChunkIds),
+          eq(captureSignals.isDeleted, false),
+        ),
+      );
     evidenceChunks = chunkRows.map((r) => ({
       text: r.redactedText,
       capturedAt: r.capturedAt,

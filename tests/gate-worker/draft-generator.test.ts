@@ -42,6 +42,7 @@ function makeLogger(): Logger {
 interface FakeDbOpts {
   existingDraft?: { id: string };
   sessionAnswers?: InterviewAnswer[];
+  sessionMissing?: boolean;
   chunks?: Array<{ redactedText: string; capturedAt: Date }>;
   newDraftId?: string;
 }
@@ -68,6 +69,7 @@ function makeFakeDb(opts: FakeDbOpts = {}): {
                 );
               }
               if (table === interviewSessions) {
+                if (opts.sessionMissing) return Promise.resolve([]);
                 return Promise.resolve([
                   { answers: opts.sessionAnswers ?? [] },
                 ]);
@@ -192,6 +194,20 @@ describe('runDraftGenerator', () => {
     });
     expect(state.inserts).toHaveLength(0);
     expect(state.updates).toHaveLength(0);
+  });
+
+  it('fails fast when no session matches the (session, candidate) pair', async () => {
+    const { db, state } = makeFakeDb({ sessionMissing: true });
+
+    await expect(
+      runDraftGenerator({
+        db,
+        logger: makeLogger(),
+        projectId: 'proj-xyz',
+        event: EVENT,
+      }),
+    ).rejects.toThrow(/no interview_sessions row/);
+    expect(state.inserts).toHaveLength(0);
   });
 
   it('still creates a draft when there are no answers or chunks', async () => {
