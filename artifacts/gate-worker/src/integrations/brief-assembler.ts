@@ -19,7 +19,9 @@ export const DEFAULT_LOCATION = 'United States';
 /** Default brief language when the candidate carries no override (PRD §6). */
 export const DEFAULT_LANGUAGE = 'English';
 
-export interface SEOwindBriefPayload {
+// Declared as a `type` (not `interface`) so it is assignable to the permissive
+// `Record<string, unknown>` shape of the `drafts.seowind_brief` JSONB column.
+export type SEOwindBriefPayload = {
   /** Brief creation popup: focus keyword (`article_candidates.primary_keyword`). */
   focusKeyword: string;
   /** Target location; defaults to "United States". */
@@ -36,7 +38,7 @@ export interface SEOwindBriefPayload {
   enableCompanyDetails: boolean;
   /** Optional correction instructions carried on rewrite attempts. */
   correctionInstructions?: string;
-}
+};
 
 export interface BriefAssemblyInput {
   /** `article_candidates.primary_keyword`. */
