@@ -2,10 +2,10 @@
  * Claude open-ended follow-up question generator (PRD §4.4 + §7.1).
  * Same shape as `generate-question.ts` — the integration guide
  * (`docs/ways-of-work/anthropic-claude-integration-guide.md`, authored
- * for Opus 4.7; model since retargeted to Claude Fable 5 per Hassan's
+ * for Opus 4.7; model since retargeted to Claude Opus 4.8 per Hassan's
  * directive, 2026-06-12) requires all five call-shape patterns:
  *
- *   - `model: 'claude-fable-5'` (default; env-overridable)   (guide §1)
+ *   - `model: 'claude-opus-4-8'` (default; env-overridable)   (guide §1)
  *   - `thinking: { type: 'adaptive' }`                      (guide §3, §4.1)
  *   - `output_config.effort: 'xhigh'`                       (guide §3, §4.3)
  *   - `output_config.format`: JSON schema for structured    (guide §5)
@@ -44,15 +44,15 @@ const SOURCE = 'telegram_bot' as const;
 
 /**
  * Anthropic model id — originally locked to Opus 4.7 per integration
- * guide §1; retargeted to Claude Fable 5 on Hassan's explicit directive
+ * guide §1; retargeted to Claude Opus 4.8 on Hassan's explicit directive
  * (2026-06-12). Override via `ANTHROPIC_MODEL`.
  */
 export const FOLLOW_UP_MODEL =
-  process.env['ANTHROPIC_MODEL']?.trim() || 'claude-fable-5';
+  process.env['ANTHROPIC_MODEL']?.trim() || 'claude-opus-4-8';
 
-/** `max_tokens` budget for one follow-up. Fable 5's always-on thinking
- *  bills into `max_tokens`, so the budget carries headroom well beyond
- *  the ≤80-word question + structured-output overhead. */
+/** `max_tokens` budget for one follow-up. Adaptive thinking bills into
+ *  `max_tokens`, so the budget carries headroom well beyond the ≤80-word
+ *  question + structured-output overhead. */
 export const FOLLOW_UP_MAX_TOKENS = 4096;
 
 /**

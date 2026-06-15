@@ -11,15 +11,16 @@ import type { AnthropicLike, ClassifiedCluster } from './types.js';
 
 /**
  * `claude-3-5-sonnet-latest` (the original default) was retired by
- * Anthropic on 2025-10-28 and 404s. Default is now Claude Fable 5 per
+ * Anthropic on 2025-10-28 and 404s. Default is now Claude Opus 4.8 per
  * Hassan's directive (2026-06-12); override via `ANTHROPIC_MODEL` or
  * `opts.model`.
  */
 export const TITLE_DEFAULT_MODEL =
-  process.env['ANTHROPIC_MODEL']?.trim() || 'claude-fable-5';
+  process.env['ANTHROPIC_MODEL']?.trim() || 'claude-opus-4-8';
 /**
- * The visible answer is ≤80 chars, but Fable 5's always-on thinking bills
- * into `max_tokens` — the old budget of 128 would truncate mid-thought.
+ * The visible answer is ≤80 chars; this `max_tokens` is generous headroom
+ * (the old budget of 128 was too tight). Opus 4.8 runs this with thinking
+ * off (effort 'low').
  */
 export const TITLE_MAX_TOKENS = 1024;
 export const TITLE_MAX_CHARS = 80;
@@ -61,11 +62,11 @@ export async function generateTitle(
     const response = await client.messages.create({
       model,
       max_tokens: TITLE_MAX_TOKENS,
-      // One-line title — cap thinking spend on Fable 5.
+      // One-line title — cap thinking spend on Opus 4.8.
       output_config: { effort: 'low' },
       messages: [{ role: 'user', content: buildPrompt(cluster) }],
     });
-    // A Fable 5 safety-classifier refusal returns empty/partial content;
+    // An Opus 4.8 safety-classifier refusal returns empty/partial content;
     // fall back to the cluster label like every other failure mode here.
     if (response.stop_reason === 'refusal') {
       return fallback;

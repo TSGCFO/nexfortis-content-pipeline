@@ -9,16 +9,15 @@ const logger = createLogger({ source: 'redaction' });
  * Default scrub model. `claude-3-5-haiku-latest` (the original default) was
  * retired by Anthropic on 2026-02-19 and now 404s, which made every scrub
  * fail and — because redaction is fail-closed — silently blocked all email
- * ingestion. Default is now Claude Fable 5 per Hassan's directive
+ * ingestion. Default is now Claude Opus 4.8 per Hassan's directive
  * (2026-06-12); override via `ANTHROPIC_MODEL` or `opts.model`.
  */
 const SCRUB_DEFAULT_MODEL =
-  process.env['ANTHROPIC_MODEL']?.trim() || 'claude-fable-5';
+  process.env['ANTHROPIC_MODEL']?.trim() || 'claude-opus-4-8';
 
 /**
- * Claude Fable 5's thinking is always on and its (invisible) thinking
- * tokens bill into `max_tokens`, so the budget needs headroom beyond the
- * redacted text + entity list themselves.
+ * Generous `max_tokens` headroom beyond the redacted text + entity list.
+ * Opus 4.8 runs this scrub with thinking off (no `thinking` param set).
  */
 const SCRUB_MAX_TOKENS = 8192;
 
@@ -75,7 +74,7 @@ interface ScrubAnthropicLike {
 /**
  * Grammar-enforced response schema. Mirrors `HaikuJsonResponse` exactly.
  * Replaces the assistant-turn `'{'` prefill the original implementation
- * used — last-assistant-turn prefills return a 400 on Claude Fable 5 and
+ * used — last-assistant-turn prefills return a 400 on Claude Opus 4.8 and
  * the whole 4.6+ family, and structured outputs are the documented
  * replacement.
  */
@@ -150,7 +149,7 @@ export interface HaikuScrubResult {
 }
 
 /**
- * Pass 2 of the redaction pipeline. Uses Claude (default: Fable 5) to
+ * Pass 2 of the redaction pipeline. Uses Claude (default: Opus 4.8) to
  * identify and replace named entities (person names, company names, street
  * addresses) the regex pass cannot catch. The function name is historical —
  * it originally ran on Claude 3.5 Haiku — and is kept to avoid churning
@@ -182,7 +181,7 @@ export async function haikuScrub(
       },
       messages: [{ role: 'user', content: buildUserPrompt(text) }],
     });
-    // Fable 5's safety classifiers can decline a request (HTTP 200 with
+    // Opus 4.8's safety classifiers can decline a request (HTTP 200 with
     // stop_reason 'refusal' and empty/partial content). Treat it like any
     // other scrub failure: throw, so redact() fails closed.
     if (response.stop_reason === 'refusal') {

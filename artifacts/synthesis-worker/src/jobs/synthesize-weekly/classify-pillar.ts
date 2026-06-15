@@ -18,14 +18,15 @@ import type { AnthropicLike } from './types.js';
 
 /**
  * `claude-3-5-haiku-latest` (the original default) was retired by Anthropic
- * on 2026-02-19 and 404s. Default is now Claude Fable 5 per Hassan's
+ * on 2026-02-19 and 404s. Default is now Claude Opus 4.8 per Hassan's
  * directive (2026-06-12); override via `ANTHROPIC_MODEL` or `opts.model`.
  */
 export const CLASSIFY_DEFAULT_MODEL =
-  process.env['ANTHROPIC_MODEL']?.trim() || 'claude-fable-5';
+  process.env['ANTHROPIC_MODEL']?.trim() || 'claude-opus-4-8';
 /**
- * The visible answer is one word, but Fable 5's always-on thinking bills
- * into `max_tokens` — the old budget of 32 would truncate mid-thought.
+ * The visible answer is one word; this `max_tokens` is headroom (the old
+ * budget of 32 was too tight). Opus 4.8 runs this with thinking off
+ * (effort 'low').
  */
 export const CLASSIFY_MAX_TOKENS = 1024;
 export const RETRY_BACKOFF_MS = 5000;
@@ -92,7 +93,7 @@ async function callOnce(
   const response = await client.messages.create({
     model,
     max_tokens: CLASSIFY_MAX_TOKENS,
-    // Single-word classification — cap thinking spend on Fable 5.
+    // Single-word classification — cap thinking spend on Opus 4.8.
     output_config: { effort: 'low' },
     messages: [{ role: 'user', content: prompt }],
   });

@@ -2,10 +2,10 @@
  * Claude confirmation-question generator (PRD §6.4 + §7.1).
  *
  * Follows `docs/ways-of-work/anthropic-claude-integration-guide.md`
- * (authored for Opus 4.7; model since retargeted to Claude Fable 5 per
+ * (authored for Opus 4.7; model since retargeted to Claude Opus 4.8 per
  * Hassan's directive, 2026-06-12 — the guide's call-shape rules carry
  * over unchanged):
- *   - `model: 'claude-fable-5'` (default; env-overridable)  (guide §1)
+ *   - `model: 'claude-opus-4-8'` (default; env-overridable)  (guide §1)
  *   - `thinking: { type: 'adaptive' }`                     (guide §3, §4.1)
  *   - `output_config.effort: 'xhigh'`                      (guide §3, §4.3)
  *   - `output_config.format`: JSON schema for structured  (guide §5)
@@ -20,7 +20,7 @@
  *   - no assistant prefilling
  *   - no top-level `effort:` (always inside `output_config`)
  *   - no legacy beta headers (the SDK doesn't accept them on `create()`)
- *   - we leave the thinking display `omitted` (the default on Fable 5,
+ *   - we leave the thinking display `omitted` (the default on Opus 4.8,
  *     as it was on Opus 4.7) since we don't need to inspect thinking
  *     content for confirmation-question generation
  *
@@ -43,17 +43,17 @@ const SOURCE = 'telegram_bot' as const;
 
 /**
  * Anthropic model id for confirmation-question generation. The guide
- * originally locked this to Opus 4.7; retargeted to Claude Fable 5 on
+ * originally locked this to Opus 4.7; retargeted to Claude Opus 4.8 on
  * Hassan's explicit directive (2026-06-12). Override via
  * `ANTHROPIC_MODEL` to tier down without a code change.
  */
 export const QUESTION_MODEL =
-  process.env['ANTHROPIC_MODEL']?.trim() || 'claude-fable-5';
+  process.env['ANTHROPIC_MODEL']?.trim() || 'claude-opus-4-8';
 
 /**
- * `max_tokens` budget for one question. Fable 5's thinking is always on
- * and bills into `max_tokens`, so the budget carries headroom well beyond
- * the ≤80-word question + structured-output overhead.
+ * `max_tokens` budget for one question. Adaptive thinking is on and bills
+ * into `max_tokens`, so the budget carries headroom well beyond the
+ * ≤80-word question + structured-output overhead.
  */
 export const MAX_TOKENS = 4096;
 
