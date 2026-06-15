@@ -1,7 +1,7 @@
 /**
  * Tests for the Custom Insights assembler (F3 PRD §7).
  *
- * Covers priority ordering, evidence captured-at sorting, the 15k character
+ * Covers priority ordering, evidence captured-at sorting, the 20k character
  * cap with truncation marker + omitted count, tone/correction wrapping, and
  * the correction-prefix format. Synthetic fixtures throughout.
  */

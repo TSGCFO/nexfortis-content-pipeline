@@ -12,8 +12,9 @@
  *
  * Priority order (PRD §7 "Character Limit"): confirmed answers first, then
  * follow-up answers, then evidence chunks in captured-at DESC order. The block
- * greedy-fills in that order until the next segment would exceed the cap, then
- * stops and appends a truncation marker.
+ * fills greedily in that order, including each segment that still fits under
+ * the cap and skipping any that would overflow it, then appends a truncation
+ * marker noting how many segments were dropped.
  */
 
 import type { GateAFailure } from '../gates/stage-a.js';
