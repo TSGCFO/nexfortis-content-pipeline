@@ -18,8 +18,12 @@
 
 import type { GateAFailure } from '../gates/stage-a.js';
 
-/** SEOwind's Insights textarea hard cap (PRD §7, confirmed by Hassan). */
-export const MAX_INSIGHTS_CHARS = 15_000;
+/**
+ * SEOwind's "Your Insights and Instructions" textarea hard cap. The live UI
+ * limit is 20,000 characters (confirmed by Hassan against the running app).
+ * NOTE: PRD §7 still records the earlier 15,000 figure and needs a docs update.
+ */
+export const MAX_INSIGHTS_CHARS = 20_000;
 
 /** A confirmed corpus evidence chunk (from `capture_signals`). */
 export interface EvidenceChunk {

@@ -180,8 +180,8 @@ describe('assembleInsightsText', () => {
     expect(result.omittedChunks).toBe(0);
   });
 
-  it('defaults the cap to 15,000 characters', () => {
-    expect(MAX_INSIGHTS_CHARS).toBe(15_000);
+  it('defaults the cap to 20,000 characters', () => {
+    expect(MAX_INSIGHTS_CHARS).toBe(20_000);
   });
 });
 

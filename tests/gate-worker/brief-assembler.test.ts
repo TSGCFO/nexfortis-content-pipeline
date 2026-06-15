@@ -42,9 +42,9 @@ describe('assembleBrief', () => {
 
   it('honours explicit location and language overrides', () => {
     const brief = assembleBrief(
-      makeInput({ location: 'Canada', language: 'French' }),
+      makeInput({ location: 'United States', language: 'French' }),
     );
-    expect(brief.location).toBe('Canada');
+    expect(brief.location).toBe('United States');
     expect(brief.language).toBe('French');
   });
 

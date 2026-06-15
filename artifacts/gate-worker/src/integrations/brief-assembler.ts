@@ -13,8 +13,8 @@
  *   project-level and UI-managed, and SEOwind has no API.
  */
 
-/** Default brief location when the candidate carries no override (PRD §6). */
-export const DEFAULT_LOCATION = 'United States';
+/** Default brief location when the candidate carries no override. */
+export const DEFAULT_LOCATION = 'Canada';
 
 /** Default brief language when the candidate carries no override (PRD §6). */
 export const DEFAULT_LANGUAGE = 'English';
@@ -24,7 +24,7 @@ export const DEFAULT_LANGUAGE = 'English';
 export type SEOwindBriefPayload = {
   /** Brief creation popup: focus keyword (`article_candidates.primary_keyword`). */
   focusKeyword: string;
-  /** Target location; defaults to "United States". */
+  /** Target location; defaults to "Canada". */
   location: string;
   /** Optional US state; omitted unless explicitly set. */
   usState?: string;
