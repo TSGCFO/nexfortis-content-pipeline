@@ -77,12 +77,24 @@ describe('splitIntoWindows', () => {
     expect(windows.join('')).toBe(text);
   });
 
-  it('falls back to a line boundary, then a hard split', () => {
+  it('falls back to a line boundary, then whitespace, then a hard split', () => {
     const lineBreaks = `${'A'.repeat(60)}\n${'B'.repeat(60)}`;
     const lw = splitIntoWindows(lineBreaks, 100);
     expect(lw[0]).toBe(`${'A'.repeat(60)}\n`);
     expect(lw.join('')).toBe(lineBreaks);
 
+    // No newlines but spaces present: cut on whitespace so no token splits.
+    const spaced = Array.from({ length: 40 }, () => 'abcdefghij').join(' '); // 439 chars
+    const sw = splitIntoWindows(spaced, 100);
+    expect(sw.join('')).toBe(spaced);
+    for (let i = 0; i < sw.length; i += 1) {
+      expect(sw[i]!.length).toBeLessThanOrEqual(100);
+      if (i < sw.length - 1) expect(sw[i]!.endsWith(' ')).toBe(true); // ends at a boundary
+    }
+    // Every token survives whole (no 'abcdefghij' is cut in half).
+    for (const tok of sw.join('').split(' ')) expect(tok).toBe('abcdefghij');
+
+    // No whitespace at all: unavoidable hard split.
     const noBreaks = 'C'.repeat(250);
     const hw = splitIntoWindows(noBreaks, 100);
     expect(hw).toEqual(['C'.repeat(100), 'C'.repeat(100), 'C'.repeat(50)]);

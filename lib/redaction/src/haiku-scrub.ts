@@ -281,10 +281,22 @@ async function scrubWindow(
 
 /**
  * Split `text` into contiguous windows of at most `maxChars`, preferring to
- * cut on a paragraph (`\n\n`) then line (`\n`) boundary so a named entity is
- * not split across two windows. The windows concatenate back to exactly
- * `text` (no characters added or dropped) — that invariant is what lets the
- * caller map a window-local offset to a global one by summing window lengths.
+ * cut on a paragraph (`\n\n`), then line (`\n`), then any whitespace boundary
+ * so a named entity is not split across two windows. The windows concatenate
+ * back to exactly `text` (no characters added or dropped) — that invariant is
+ * what lets the caller map a window-local offset to a global one by summing
+ * window lengths.
+ *
+ * SECURITY (residual seam risk): each window is scrubbed by an independent
+ * model call, so an entity that straddles a window boundary is seen only as
+ * fragments and may pass through un-redacted. Cutting on whitespace prevents
+ * splitting a single token (e.g. a no-space company name or address number).
+ * A multi-word person name whose internal space lands exactly on the chosen
+ * cut can still split; that requires a >`maxChars` run with the boundary on
+ * that precise space, which is rare for real captures (turns are joined with
+ * `\n\n`). The airtight fix is overlap-context scrubbing (re-feed the previous
+ * window's tail as read-only context). TODO(hassan): adopt overlap-context if
+ * seam leakage is ever observed in practice.
  */
 export function splitIntoWindows(text: string, maxChars: number): string[] {
   if (text.length === 0) return [];
@@ -296,11 +308,14 @@ export function splitIntoWindows(text: string, maxChars: number): string[] {
     if (end < text.length) {
       const window = text.slice(cursor, end);
       const paraBreak = window.lastIndexOf('\n\n');
+      const lineBreak = window.lastIndexOf('\n');
+      const wsBreak = window.search(/\s\S*$/); // index of the last whitespace run
       if (paraBreak > 0) {
         end = cursor + paraBreak + 2;
-      } else {
-        const lineBreak = window.lastIndexOf('\n');
-        if (lineBreak > 0) end = cursor + lineBreak + 1;
+      } else if (lineBreak > 0) {
+        end = cursor + lineBreak + 1;
+      } else if (wsBreak > 0) {
+        end = cursor + wsBreak + 1;
       }
     }
     windows.push(text.slice(cursor, end));
