@@ -9,18 +9,34 @@ const logger = createLogger({ source: 'redaction' });
  * Default scrub model. `claude-3-5-haiku-latest` (the original default) was
  * retired by Anthropic on 2026-02-19 and now 404s, which made every scrub
  * fail and — because redaction is fail-closed — silently blocked all email
- * ingestion. Default is now Claude Fable 5 per Hassan's directive
+ * ingestion. Default is now Claude Opus 4.8 per Hassan's directive
  * (2026-06-12); override via `ANTHROPIC_MODEL` or `opts.model`.
  */
 const SCRUB_DEFAULT_MODEL =
-  process.env['ANTHROPIC_MODEL']?.trim() || 'claude-fable-5';
+  process.env['ANTHROPIC_MODEL']?.trim() || 'claude-opus-4-8';
 
 /**
- * Claude Fable 5's thinking is always on and its (invisible) thinking
- * tokens bill into `max_tokens`, so the budget needs headroom beyond the
- * redacted text + entity list themselves.
+ * `max_tokens` ceiling for a single window response. Each scrub call sees at
+ * most `MAX_WINDOW_CHARS` of text (see below), so this comfortably fits that
+ * window's redacted text plus its entity list. Opus 4.8 runs this scrub with
+ * thinking off (no `thinking` param set).
  */
 const SCRUB_MAX_TOKENS = 8192;
+
+/**
+ * Maximum characters of input per scrub window.
+ *
+ * The scrub asks the model to echo a window's redacted text back inside its
+ * JSON response. A single call over a long conversation therefore produces a
+ * JSON string longer than `SCRUB_MAX_TOKENS` can hold; the response truncates
+ * mid-string, `JSON.parse` throws and — because redaction is fail-closed —
+ * the entire capture is blocked. (This silently dropped real, long captures.)
+ *
+ * Windowing bounds every response: 8 000 chars of input yields well under
+ * `SCRUB_MAX_TOKENS` of output even for token-dense text, leaving generous
+ * headroom for JSON escaping and the entity list.
+ */
+const MAX_WINDOW_CHARS = 8000;
 
 type HaikuEntityType = 'person' | 'company' | 'address';
 
@@ -66,7 +82,7 @@ interface ScrubMessagesResponse {
   content: Array<{ type: string; text?: string }>;
 }
 
-interface ScrubAnthropicLike {
+export interface ScrubAnthropicLike {
   messages: {
     create(args: ScrubMessagesCreateArgs): Promise<ScrubMessagesResponse>;
   };
@@ -75,7 +91,7 @@ interface ScrubAnthropicLike {
 /**
  * Grammar-enforced response schema. Mirrors `HaikuJsonResponse` exactly.
  * Replaces the assistant-turn `'{'` prefill the original implementation
- * used — last-assistant-turn prefills return a 400 on Claude Fable 5 and
+ * used — last-assistant-turn prefills return a 400 on Claude Opus 4.8 and
  * the whole 4.6+ family, and structured outputs are the documented
  * replacement.
  */
@@ -142,6 +158,12 @@ function buildUserPrompt(text: string): string {
 export interface HaikuScrubOptions {
   anthropicApiKey: string;
   model?: string;
+  /**
+   * Test seam: inject a stand-in Anthropic client so the windowing and
+   * offset-stitching logic can be exercised without a network call. Falls
+   * back to a real `Anthropic` client built from `anthropicApiKey`.
+   */
+  client?: ScrubAnthropicLike;
 }
 
 export interface HaikuScrubResult {
@@ -150,7 +172,7 @@ export interface HaikuScrubResult {
 }
 
 /**
- * Pass 2 of the redaction pipeline. Uses Claude (default: Fable 5) to
+ * Pass 2 of the redaction pipeline. Uses Claude (default: Opus 4.8) to
  * identify and replace named entities (person names, company names, street
  * addresses) the regex pass cannot catch. The function name is historical —
  * it originally ran on Claude 3.5 Haiku — and is kept to avoid churning
@@ -167,10 +189,50 @@ export async function haikuScrub(
     throw new Error('haiku_scrub: anthropicApiKey is required');
   }
   const model = opts.model ?? SCRUB_DEFAULT_MODEL;
-  const client = new Anthropic({
-    apiKey: opts.anthropicApiKey,
-  }) as unknown as ScrubAnthropicLike;
+  const client =
+    opts.client ??
+    (new Anthropic({
+      apiKey: opts.anthropicApiKey,
+    }) as unknown as ScrubAnthropicLike);
 
+  // Scrub the document one bounded window at a time. A single call over a
+  // long conversation overruns `max_tokens` (see `MAX_WINDOW_CHARS`), so we
+  // slice `text` into contiguous windows and scrub each independently.
+  // Because the windows are exact, contiguous slices of `text`, a running
+  // `base` offset maps each window-local entity offset back to a position in
+  // `text` for the audit log. Any window failure throws, so redaction stays
+  // fail-closed for the whole capture.
+  const windows = splitIntoWindows(text, MAX_WINDOW_CHARS);
+  const redactedParts: string[] = [];
+  const log: RedactionLogEntry[] = [];
+  let base = 0;
+  for (const window of windows) {
+    const result = await scrubWindow(window, model, client);
+    redactedParts.push(result.redacted);
+    for (const e of result.entities) {
+      log.push({
+        type: e.type,
+        offset: base + e.offset,
+        replacement: ENTITY_TOKEN[e.type],
+      });
+    }
+    base += window.length;
+  }
+
+  return { redacted: redactedParts.join(''), log };
+}
+
+/**
+ * Scrub one window: a single Anthropic call → parsed, validated
+ * `{ redacted, entities }` whose offsets are relative to `windowText`. Any
+ * failure (network, safety refusal, malformed/truncated JSON, schema
+ * violation) throws so the caller fails closed.
+ */
+async function scrubWindow(
+  windowText: string,
+  model: string,
+  client: ScrubAnthropicLike,
+): Promise<HaikuJsonResponse> {
   let raw: string;
   try {
     const response = await client.messages.create({
@@ -180,9 +242,9 @@ export async function haikuScrub(
       output_config: {
         format: { type: 'json_schema', schema: SCRUB_JSON_SCHEMA },
       },
-      messages: [{ role: 'user', content: buildUserPrompt(text) }],
+      messages: [{ role: 'user', content: buildUserPrompt(windowText) }],
     });
-    // Fable 5's safety classifiers can decline a request (HTTP 200 with
+    // Opus 4.8's safety classifiers can decline a request (HTTP 200 with
     // stop_reason 'refusal' and empty/partial content). Treat it like any
     // other scrub failure: throw, so redact() fails closed.
     if (response.stop_reason === 'refusal') {
@@ -214,15 +276,52 @@ export async function haikuScrub(
     throw new Error('haiku_scrub: failed to parse JSON response');
   }
 
-  const validated = validateResponse(parsed, text);
+  return validateResponse(parsed, windowText);
+}
 
-  const log: RedactionLogEntry[] = validated.entities.map((e) => ({
-    type: e.type,
-    offset: e.offset,
-    replacement: ENTITY_TOKEN[e.type],
-  }));
-
-  return { redacted: validated.redacted, log };
+/**
+ * Split `text` into contiguous windows of at most `maxChars`, preferring to
+ * cut on a paragraph (`\n\n`), then line (`\n`), then any whitespace boundary
+ * so a named entity is not split across two windows. The windows concatenate
+ * back to exactly `text` (no characters added or dropped) — that invariant is
+ * what lets the caller map a window-local offset to a global one by summing
+ * window lengths.
+ *
+ * SECURITY (residual seam risk): each window is scrubbed by an independent
+ * model call, so an entity that straddles a window boundary is seen only as
+ * fragments and may pass through un-redacted. Cutting on whitespace prevents
+ * splitting a single token (e.g. a no-space company name or address number).
+ * A multi-word person name whose internal space lands exactly on the chosen
+ * cut can still split; that requires a >`maxChars` run with the boundary on
+ * that precise space, which is rare for real captures (turns are joined with
+ * `\n\n`). The airtight fix is overlap-context scrubbing (re-feed the previous
+ * window's tail as read-only context). TODO(hassan): adopt overlap-context if
+ * seam leakage is ever observed in practice.
+ */
+export function splitIntoWindows(text: string, maxChars: number): string[] {
+  if (text.length === 0) return [];
+  if (text.length <= maxChars) return [text];
+  const windows: string[] = [];
+  let cursor = 0;
+  while (cursor < text.length) {
+    let end = Math.min(cursor + maxChars, text.length);
+    if (end < text.length) {
+      const window = text.slice(cursor, end);
+      const paraBreak = window.lastIndexOf('\n\n');
+      const lineBreak = window.lastIndexOf('\n');
+      const wsBreak = window.search(/\s\S*$/); // index of the last whitespace run
+      if (paraBreak > 0) {
+        end = cursor + paraBreak + 2;
+      } else if (lineBreak > 0) {
+        end = cursor + lineBreak + 1;
+      } else if (wsBreak > 0) {
+        end = cursor + wsBreak + 1;
+      }
+    }
+    windows.push(text.slice(cursor, end));
+    cursor = end;
+  }
+  return windows;
 }
 
 function extractJson(raw: string): string {
@@ -246,32 +345,37 @@ function validateResponse(parsed: unknown, originalText: string): HaikuJsonRespo
     throw new Error('haiku_scrub: missing "entities" array');
   }
 
-  const entities: HaikuEntity[] = entitiesRaw.map((e, idx) => {
-    if (!e || typeof e !== 'object') {
-      throw new Error(`haiku_scrub: entity[${idx}] is not an object`);
-    }
+  // Entity offsets are an AUDIT-ONLY positional hint: `redact()` applies the
+  // model's rewritten `redacted` text, never these offsets. LLMs routinely
+  // miscount character positions in a long window, so a bad offset must NOT
+  // fail the whole capture closed (that silently dropped real conversations).
+  // We therefore keep an entity whenever its `type` and `replacement` are
+  // valid — those define WHAT was redacted — and defensively clamp the
+  // offset/length into range for the log. Entities with an unusable type or
+  // replacement are dropped from the log (the redaction itself still stands).
+  const max = originalText.length;
+  const entities: HaikuEntity[] = [];
+  for (const e of entitiesRaw) {
+    if (!e || typeof e !== 'object') continue;
     const ent = e as Record<string, unknown>;
     const type = ent['type'];
-    if (type !== 'person' && type !== 'company' && type !== 'address') {
-      throw new Error(`haiku_scrub: entity[${idx}] has invalid type "${String(type)}"`);
-    }
-    const offset = ent['offset'];
-    const length = ent['length'];
-    if (typeof offset !== 'number' || !Number.isInteger(offset) || offset < 0) {
-      throw new Error(`haiku_scrub: entity[${idx}] has invalid offset`);
-    }
-    if (typeof length !== 'number' || !Number.isInteger(length) || length < 0) {
-      throw new Error(`haiku_scrub: entity[${idx}] has invalid length`);
-    }
-    if (offset + length > originalText.length) {
-      throw new Error(`haiku_scrub: entity[${idx}] offset+length out of range`);
-    }
+    if (type !== 'person' && type !== 'company' && type !== 'address') continue;
     const replacement = ent['replacement'];
-    if (typeof replacement !== 'string') {
-      throw new Error(`haiku_scrub: entity[${idx}] replacement must be string`);
-    }
-    return { type, offset, length, replacement };
-  });
+    if (typeof replacement !== 'string') continue;
+
+    const rawOffset = ent['offset'];
+    const rawLength = ent['length'];
+    let offset =
+      typeof rawOffset === 'number' && Number.isInteger(rawOffset) ? rawOffset : 0;
+    let length =
+      typeof rawLength === 'number' && Number.isInteger(rawLength) ? rawLength : 0;
+    if (offset < 0) offset = 0;
+    if (offset > max) offset = max;
+    if (length < 0) length = 0;
+    if (offset + length > max) length = max - offset;
+
+    entities.push({ type, offset, length, replacement });
+  }
 
   return { redacted, entities };
 }

@@ -4,17 +4,14 @@
  * Pattern source: `docs/ways-of-work/anthropic-claude-integration-guide.md`
  * sections 1 (model assignment), 5 (structured outputs), 6 (prompt
  * caching), 7 (stop-reason handling). The guide originally assigned
- * Haiku 4.5 to this task; the model was retargeted to Claude Fable 5 on
+ * Haiku 4.5 to this task; the model was retargeted to Claude Opus 4.8 on
  * Hassan's explicit directive (2026-06-12).
  *
  * Differences from `generate-question.ts` / `generate-follow-up.ts`:
- *   - NO `thinking` field. On Fable 5 thinking is always on and the
- *     parameter is best omitted entirely (an explicit
- *     `{ type: 'disabled' }` returns a 400). We don't need to inspect
- *     thinking content for a paraphrase task.
+ *   - NO `thinking` field. Omitting it leaves thinking off on Opus 4.8 —
+ *     fine for a paraphrase task where we don't inspect thinking content.
  *   - `output_config.effort: 'low'` (not `xhigh`) — a 1–2 sentence
- *     paraphrase doesn't warrant deep thinking, and on Fable 5 the
- *     (invisible) thinking tokens bill into `max_tokens`.
+ *     paraphrase doesn't warrant deep thinking.
  *   - Schema is small: `{ summary_text: string }`.
  *   - `system` block uses `cache_control: { type: 'ephemeral' }` — same
  *     pattern as the Opus calls so a follow-up summary call for a
@@ -44,14 +41,14 @@ const SOURCE = 'telegram_bot' as const;
 
 /**
  * Anthropic model id — originally Haiku 4.5 per integration guide §1;
- * retargeted to Claude Fable 5 on Hassan's explicit directive
+ * retargeted to Claude Opus 4.8 on Hassan's explicit directive
  * (2026-06-12). Override via `ANTHROPIC_MODEL`.
  */
 export const CLOSING_SUMMARY_MODEL =
-  process.env['ANTHROPIC_MODEL']?.trim() || 'claude-fable-5';
+  process.env['ANTHROPIC_MODEL']?.trim() || 'claude-opus-4-8';
 
 /** `max_tokens` for one closing summary. The paraphrase itself is ≤300
- *  chars, but Fable 5's always-on thinking bills into `max_tokens`. */
+ *  chars, but Opus 4.8's always-on thinking bills into `max_tokens`. */
 export const CLOSING_SUMMARY_MAX_TOKENS = 2048;
 
 /**
@@ -216,8 +213,8 @@ export async function generateClosingSummary(
     response = await input.anthropic.messages.create({
       model: CLOSING_SUMMARY_MODEL,
       max_tokens: CLOSING_SUMMARY_MAX_TOKENS,
-      // NB: no `thinking` field — on Fable 5 thinking is always on; omit
-      // the param (an explicit `{ type: 'disabled' }` returns a 400).
+      // NB: no `thinking` field — omitting it leaves thinking off on
+      // Opus 4.8, which is what we want for this cheap paraphrase.
       output_config: {
         // Cap thinking spend — this is a 1–2 sentence paraphrase.
         effort: 'low',

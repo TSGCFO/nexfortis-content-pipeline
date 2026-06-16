@@ -1,7 +1,7 @@
 /**
  * Tests for the Custom Insights assembler (F3 PRD §7).
  *
- * Covers priority ordering, evidence captured-at sorting, the 15k character
+ * Covers priority ordering, evidence captured-at sorting, the 20k character
  * cap with truncation marker + omitted count, tone/correction wrapping, and
  * the correction-prefix format. Synthetic fixtures throughout.
  */
@@ -180,8 +180,8 @@ describe('assembleInsightsText', () => {
     expect(result.omittedChunks).toBe(0);
   });
 
-  it('defaults the cap to 15,000 characters', () => {
-    expect(MAX_INSIGHTS_CHARS).toBe(15_000);
+  it('defaults the cap to 20,000 characters', () => {
+    expect(MAX_INSIGHTS_CHARS).toBe(20_000);
   });
 });
 

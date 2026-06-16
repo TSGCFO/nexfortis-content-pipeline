@@ -149,7 +149,7 @@ describe('generateClosingSummary', () => {
     }
   });
 
-  it('call structure correct: model is claude-fable-5 with cache_control on system, structured-output format, NO thinking field, NO top-level effort, output_config.effort low', async () => {
+  it('call structure correct: model is claude-opus-4-8 with cache_control on system, structured-output format, NO thinking field, NO top-level effort, output_config.effort low', async () => {
     const { anthropic, create } = makeAnthropic(async () => happyHaikuResponse());
     await generateClosingSummary({
       sessionState: SESSION_STATE,
@@ -161,8 +161,8 @@ describe('generateClosingSummary', () => {
 
     expect(args.model).toBe(CLOSING_SUMMARY_MODEL);
 
-    // Fable 5's thinking is always on; the param is omitted entirely
-    // (an explicit `{ type: 'disabled' }` would 400).
+    // Opus 4.8 runs this cheap paraphrase with thinking off — the param
+    // is omitted entirely.
     expect(args.thinking).toBeUndefined();
 
     expect(args.output_config?.format?.type).toBe('json_schema');

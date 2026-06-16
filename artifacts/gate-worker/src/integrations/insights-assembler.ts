@@ -12,14 +12,19 @@
  *
  * Priority order (PRD §7 "Character Limit"): confirmed answers first, then
  * follow-up answers, then evidence chunks in captured-at DESC order. The block
- * greedy-fills in that order until the next segment would exceed the cap, then
- * stops and appends a truncation marker.
+ * fills greedily in that order, including each segment that still fits under
+ * the cap and skipping any that would overflow it, then appends a truncation
+ * marker noting how many segments were dropped.
  */
 
 import type { GateAFailure } from '../gates/stage-a.js';
 
-/** SEOwind's Insights textarea hard cap (PRD §7, confirmed by Hassan). */
-export const MAX_INSIGHTS_CHARS = 15_000;
+/**
+ * SEOwind's "Your Insights and Instructions" textarea hard cap. The live UI
+ * limit is 20,000 characters (confirmed by Hassan against the running app).
+ * NOTE: PRD §7 still records the earlier 15,000 figure and needs a docs update.
+ */
+export const MAX_INSIGHTS_CHARS = 20_000;
 
 /** A confirmed corpus evidence chunk (from `capture_signals`). */
 export interface EvidenceChunk {

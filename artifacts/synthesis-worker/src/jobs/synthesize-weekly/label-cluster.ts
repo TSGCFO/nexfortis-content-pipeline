@@ -4,7 +4,7 @@
  * Concatenates the cluster's redacted texts (capped at 8,000 chars) and
  * asks the model for a JSON object describing the topic, grammar-enforced
  * via structured outputs (`output_config.format`). The original
- * assistant-turn `'{'` prefill was removed: prefills 400 on Claude Fable 5
+ * assistant-turn `'{'` prefill was removed: prefills 400 on Claude Opus 4.8
  * and the 4.6+ family, and the original `claude-3-5-sonnet-latest` default
  * was retired by Anthropic on 2025-10-28 (calls 404ed in production).
  *
@@ -18,8 +18,8 @@ import { z } from 'zod';
 import type { AnthropicLike, Cluster } from './types.js';
 
 export const LABEL_DEFAULT_MODEL =
-  process.env['ANTHROPIC_MODEL']?.trim() || 'claude-fable-5';
-/** Fable 5's always-on thinking bills into `max_tokens` — keep headroom. */
+  process.env['ANTHROPIC_MODEL']?.trim() || 'claude-opus-4-8';
+/** Headroom for the structured-output JSON (Opus 4.8 runs this with thinking off). */
 export const LABEL_MAX_TOKENS = 2048;
 export const TEXT_CONCAT_CAP = 8000;
 export const LABEL_MAX_CHARS = 80;
@@ -99,7 +99,7 @@ export async function labelCluster(
     messages: [{ role: 'user', content: userPrompt }],
   });
 
-  // Fable 5 safety classifiers can decline with stop_reason 'refusal'
+  // Opus 4.8 safety classifiers can decline with stop_reason 'refusal'
   // (HTTP 200, empty/partial content). Throw so the caller's retry/discard
   // path handles it like any other labeling failure.
   if (response.stop_reason === 'refusal') {
