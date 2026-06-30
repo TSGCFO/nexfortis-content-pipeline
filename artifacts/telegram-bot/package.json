@@ -20,7 +20,7 @@
     "@ncp/db": "workspace:*",
     "@ncp/logger": "workspace:*",
     "@ncp/shared-types": "workspace:*",
-    "drizzle-orm": "^0.36.0",
+    "drizzle-orm": "^0.45.2",
     "grammy": "^1.31.0",
     "inngest": "^3.22.0",
     "openai": "^4.104.0"
